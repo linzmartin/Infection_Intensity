@@ -219,7 +219,7 @@ II_Summary %>%
 #https://www.jstatsoft.org/article/view/v027i08
 
 #plot a histogram of the data:
-plot(table(II_Data$CFUs))
+plot(table(II_Data$CFUs),xlab = "CFUs",ylab="count")
 plot(CFUs ~ Temperature, data = II_Data)
 plot(CFUs ~ Age, data = II_Data)
 plot(CFUs ~ Infectious_Dose, data = II_Data)
@@ -231,9 +231,11 @@ c_log <- function(x) log(x + 0.5) #add 0.5 so values can be log transformed
 plot(c_log(CFUs) ~ Temperature, data = II_Data)
 plot(c_log(CFUs) ~ Age, data = II_Data)
 
-###########
+
 #plot the empirical distribution and density (CDF)
 plotdist(II_Data$CFUs, histo=TRUE,demp=TRUE)
+
+plotdist(c_log(II_Data$CFUs),histo=TRUE,demp=TRUE)
 
 #descriptive statistics of the data and graph
 #estimating skewness and kurtosis, using bootstrap samples 
@@ -257,6 +259,7 @@ c(mean=r[1],var=r[2],ratio=r[2]/r[1]) #ratio is 1.2e6 (greater than 1.1 and cons
 #Poisson assumption of equal mean and variance does not hold true
 #use Neg Binom (mean does not equal variance, which is assumed by Poisson dist.
 
+#assess fits:
 #check to see if the data follow a poisson distribution
 fit_poisson_CFUs <- fitdist((II_Data$CFUs),"pois")
 summary(fit_poisson_CFUs)
@@ -354,17 +357,17 @@ glmNegBinomial$theta #theta = 0.6415172
 #how much larger/smaller is the variance relative to the mean for the Neg Binomial model?
 phi <- sum(pr^2)/df.residual(glmNegBinomial)
 round(c(phi,sqrt(phi)),4) #variance is 0.7048 times smaller than the mean
-
+#show another way too:
 E2 <- resid(glmNegBinomial, type = "pearson")
 N  <- nrow(II_Data)
 p  <- length(coef(glmNegBinomial)) + 1  # '+1' is for variance in NB model
 sum(E2^2) / (N - p) #= 0.705 ==== under-dispersion due to neg binomial model
+#may have over-corrected for the zero inflation by using a negative binomial fit --
+#check to see if other fits may be better
+
 
 ###
 #can use a zero-inflated model or a hurdle model instead to account for excess zeros
-#zero-inflated model has two sources of zeros: sampling zeros and structural zeros
-#hurdle model only has 1 source: sampling zeros (there are no structural zeros)
-#we will try a hurdle model - the zero values that occur are due to sampling (and could be non-zero, so they are not structural zeros)
 
 #https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5628625/#:~:text=Structural%20zeros%20refer%20to%20zero,zero%20due%20to%20sampling%20variability.
 #https://lanzaroark.org/docs/zero.pdf
@@ -372,42 +375,58 @@ sum(E2^2) / (N - p) #= 0.705 ==== under-dispersion due to neg binomial model
 #https://m-clark.github.io/models-by-example/hurdle.html
 #https://search.r-project.org/CRAN/refmans/pscl/html/hurdle.html
 #https://data.library.virginia.edu/getting-started-with-hurdle-models/
+#https://www.r-bloggers.com/2013/05/veterinary-epidemiologic-research-count-and-rate-data-zero-counts/
 
 library(pscl)
 # count data conditional on the zero hurdle
 #count model is usually poisson or neg binomial with log link
+
 #zero hurdle model is binomial 
 #get an output for 2 different models: (1) positive counts, (2) zero counts
 #outcome of hurdle component is the occurrence of a non-zero (positive) count
 #"positive coefficients in the hurdle component indicate that an increase in the regressor increases the probability of a non-zero count" - package & function description
 #can include all covariates in each equation or make a simpler model
 
+
+#left-truncated count component + right-censored hurdle component
+#try both a poisson fit and a neg-binom fit
 hurdle1 <- hurdle(CFUs ~ Temperature*Age | Temperature*Age, data=II_Data,dist="poisson")
 summary(hurdle1)
-
 hurdle2 <- hurdle(CFUs ~ Temperature+Age+Temperature*Age | Temperature+Age+Temperature*Age, data=II_Data,dist="negbin") #logit-negbin
 summary(hurdle2)
+
+#compare the likelihood ratios for the hurdle models based on poisson and neg-binom fits
+lrtest(hurdle1,hurdle2) #hurdle 2 better
 
 #use negative binomial fit because log likelihood decreases compared to poisson
 
 #does the interaction term matter?
-hurdle3 <- hurdle(CFUs ~ Temperature+Age | Temperature+Age, data=II_Data,dist="negbin")
-summary(hurdle3)
-
-lrtest(hurdle3,hurdle2) #significantly different - need to include interaction term
-
-#going with hurdle2 -- rename to hurdle_model:
-hurdle_model <- hurdle2
-
 hurdle4 <- hurdle(CFUs ~ Temperature*Age | Temperature+Age, data=II_Data,dist="negbin")
 summary(hurdle4)
 lrtest(hurdle2,hurdle4) #no significant diff - remove the interaction term
-#go with hurdle4
 
+hurdle3 <- hurdle(CFUs ~ Temperature+Age | Temperature+Age, data=II_Data,dist="negbin")
+summary(hurdle3)
+lrtest(hurdle3,hurdle4) #there is a significant difference - need to include the interaction term in the count model
+#so far, hurdle 4 is best
 
-plot(factor(CFUs == 0) ~ Temperature*Age, data = II_Data, main = "Zero")
-plot(log(sightings) ~ depth, data = hdata1, subset = sightings > 0,
-     main = "Count")
+#for the hurdle component, check the importance of the main effects:
+hurdle6 <- hurdle(CFUs ~ Temperature*Age | Temperature, data=II_Data,dist="negbin")
+summary(hurdle6)
+lrtest(hurdle4,hurdle6) #hurdle 4 is better
+
+hurdle7 <- hurdle(CFUs ~ Temperature*Age | Age, data=II_Data,dist="negbin")
+summary(hurdle7)
+lrtest(hurdle4,hurdle7) #ns - but LogLik does slightly increase with removal of Temp
+
+#hurdle5 <- hurdle(CFUs ~ Temperature*Age | 1, data=II_Data,dist="negbin")
+#summary(hurdle5)
+
+lrtest(hurdle7,hurdle5) #including age is better than the intercept alone
+
+#going with hurdle4 because of increase in logLik but lack of significance -- rename to hurdle_model:
+hurdle_model <- hurdle4
+summary(hurdle_model)
 
 ###
 #try zero-inflated model instead: 
@@ -431,57 +450,174 @@ z4 <- zeroinfl(CFUs ~ Temperature*Age | Temperature*Age ## Predictor for the Poi
                dist = 'negbin',
                data = II_Data)
 
+z5 <- zeroinfl(CFUs ~ Temperature*Age | Temperature+Age ## Predictor for the Poisson process
+               , ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data)
+
 summary(z1) #not applicable
 summary(z2) #poisson with log link
 summary(z3)
-summary(z4) #go with z4
+summary(z4) 
+summary(z5)
 
-pchisq(2 * (logLik(z4) - logLik(z3)), df = 3, lower.tail = FALSE)
-lrtest(z4,z3)
-
+#do we need to include the interation term for the second part?
+lrtest(z4,z5) #go with z5 - do not include interaction in 2nd half
 
 ######
 #https://www.jstatsoft.org/article/view/v027i08 source for model estimations
 #compare ML estimators for different models: 
 model_list <- list("ML-Pois" = glmPoisson, "Quasi-Pois" = glmQuasiPoisson, "NB" = glmNegBinomial,
-                   "Hurdle-NB" = hurdle_model, "ZINB" = z4)
+                   "Hurdle-NB" = hurdle_model, "ZINB" = z5)
 
 #inspect estimated regression coefficients for each model:
 sapply(model_list, function(x) coef(x)[1:8])
 
-library(sandwich)
-cbind("ML-Pois" = sqrt(diag(vcov(glmPoisson))),
-      "Adj-Pois" = sqrt(diag(sandwich(glmPoisson))),
-      sapply(model_list[1], function(x) sqrt(diag(vcov(x)))[1:8]))
+#library(sandwich)
+#cbind("ML-Pois" = sqrt(diag(vcov(glmPoisson))),
+ #     "Adj-Pois" = sqrt(diag(sandwich(glmPoisson))),
+  #    sapply(model_list[1], function(x) sqrt(diag(vcov(x)))[1:8]))
 
 rbind(logLik = sapply(model_list, function(x) round(logLik(x), digits = 0)),
       Df = sapply(model_list, function(x) attr(logLik(x), "df")))
 #ML-Pois and Quasi-Pois can be eliminated
 #better models are NB, Hurdle-NB, and ZINB
 #NB is improved by addition of hurdle or zinb (nearly identical)
-#go with hurdle model because zeros are due to sampling, not structural zeros
+
+######
+#decide between the hurdle model and zero-inflated negative binomial model:
+#Hurdle: the zero hurdle component = the probability of observing a positive count
+#hurdle model = two sources of zeros
+#ZINB model: the zero-inflation component = probability of observing a zero count from the point mass component
+#one source of zeros
+AIC(z5, hurdle_model)
+BIC(z5, hurdle_model)
+
+summary(z5)
+summary(hurdle_model)
+
+fm <- list("ZINB" = z5, "Hurdle-NB" = hurdle_model)
+t(sapply(fm[1:2], function(x) round(x$coefficients$zero, digits = 3)))
+#the coefficients for the zero component are opposite signs (makes sense because models predict probability of positive/negative)
+t(sapply(fm[1:2], function(x) round(exp(x$coefficients$zero), digits = 3)))
+
+
+#install.packages("countreg", repos="http://R-Forge.R-project.org")
+library(countreg)
+graphics.off()
+rootogram(z5, main = "Zero-Inflated Negative Binomial", ylim = c(-5, 5), max = 1000)
+rootogram(hurdle_model, main = "Negative Binomial Hurdle", ylim = c(-10, 5), max = 10000)
+#qqrplot(z5, main = "Zero-Inflated Negative Binomial") #very intensive computationally
+#qqrplot(hurdle_model, main = "Negative Binomial Hurdle") #intensive computationally
 
 
 #how are the zeros captured by the models? 
+gc() #clear memory in R first
+#hurdle_predictions <- predict(hurdle_model,type="prob") #this is computationally intensive and may take awhile
+zinb_predictions <- predict(z5, type = "prob") #even more computationally intensive - too large to process in R alone
+#=22
 
-hurdle_predictions <- predict(hurdle_model,type="prob") #this is computationally intensive and may take awhile
-#zinb_predictions <- predict(z4, type = "prob") #even more computationally intensive - too large to process in R alone
+#str(hurdle_predictions)
+str(zinb_predictions)
 
 observed_zeros <- round(sum(II_Data$CFUs < 1)) 
 Pois_zeros <- round(sum(dpois(0, fitted(glmPoisson))))
 NegBin_zeros <- round(sum(dnbinom(0, mu = fitted(glmNegBinomial), size = glmNegBinomial$theta)))
 NB_Hurdle_zeros <- round(sum(hurdle_predictions[,1]))
+zinb_zeros <- round(sum(zinb_predictions[,1]))
 
-comparing_zeros <- c("Obs"=observed_zeros,"ML-Pois"=Pois_zeros,"NB"=NegBin_zeros,"NB-Hurdle"=NB_Hurdle_zeros)
+NB_Hurdle_ones <- round(sum(hurdle_predictions[,2]))
+
+comparing_zeros <- c("Obs"=observed_zeros,"ML-Pois"=Pois_zeros,"NB"=NegBin_zeros,"ZINB"=zinb_zeros)#"NB-Hurdle"=NB_Hurdle_zeros)
 comparing_zeros
+
+
+
+
+#expected mean counts:
+mu_hurdle <- predict(hurdle_model,type="response")
+mu_zinb <- predict(z5, type="response")
 
 #we can see that the hurdle model prediction matches the observed # of zeros
 
 #compare AIC values now:
-Model_AICs <- c(PoisAIC = AIC(glmPoisson),NegBinAIC=AIC(glmNegBinomial), NB_HurdleAIC = AIC(hurdle_model),ZeroInfl_AIC = AIC(z4))
+Model_AICs <- c(PoisAIC = AIC(glmPoisson),NegBinAIC=AIC(glmNegBinomial), NB_HurdleAIC = AIC(hurdle_model),ZeroInfl_AIC = AIC(z5))
 Model_AICs
 
-plot(hurdle_model)
+###
+#model of choice: zero-inflated
+#one source of zeros, not two separate processes
+###
+
+#inspect and interpret model summary:
+summary(hurdle_model)
+
+Zero_inflated_neg_binom_model <- z5
+summary(Zero_inflated_neg_binom_model)
+
+plot(density(II_Data$CFUs))
+
+plot(hurdle_model$fitted.values~hurdle_model$residuals)
+hurdle_model$coefficients
+
+plot(Zero_inflated_neg_binom_model$fitted.values~Zero_inflated_neg_binom_model$residuals)
+Zero_inflated_neg_binom_model$coefficients
+
+#plot(density(hurdle_predictions))
+
+predhudlenb <-predict(hurdle_model,newdata=II_Data[II_Data$CFUs!=0,],type="response")
+plot(II_Data$CFUs[II_Data$CFUs!=0],type="b",col="red") #actual
+lines(round(predhudlenb),col="blue") #predicted values
+
+predzinb <- predict(Zero_inflated_neg_binom_model,
+                    newdata=II_Data[II_Data$CFUs!=0,],
+                    type="response")
+plot(II_Data$CFUs[II_Data$CFUs!=0],type="b",col="red")
+lines(round(predzinb),col="blue") #predicted values
+
+
+g1<-ggplot(II_Data)+
+  geom_density(aes(x=CFUs, fill="observed CFUs"), alpha=0.5)
+g1
+
+
+#https://www.r-bloggers.com/2020/01/count-data-models/
+require("ModelMetrics")
+
+predhnb<- predict(hurdle_model,newdata=II_Data,type = "response")
+plot((II_Data$CFUs),type="p")
+lines(round(predhnb),col="blue")
+str(predhnb)
+
+rmsemodelhnb<-ModelMetrics::rmse(II_Data$CFUs,round(predhnb)) #root mean square error
+maemodelhnb<-mae(II_Data$CFUs,round(predhnb)) #mean absolute error
+rmsemodelhnb
+maemodelhnb
+
+predznb<- predict(z5,newdata=II_Data,type = "response")
+rmsemodelznb<-ModelMetrics::rmse(II_Data$CFUs,round(predznb))
+maemodelznb<-mae(II_Data$CFUs,round(predznb))
+rmsemodelznb
+maemodelznb
+
+
+
+#########################
+
+
+
+
+#Neg binomial with log link regression coefficients for each of the variables along 
+#with standard errors, z-scores, and p-values 
+#A second block follows that corresponds to the inflation model. 
+#This includes binomial logit coefficients for predicting excess zeros along 
+#with their standard errors, z-scores, and p-values.
+
+#is this model better than the negative binomial model alone (non-hurdle)?
+#?vuong() Vuong non-nested test compares models that don't nest with likelihood ratios
+#vuong(hurdle_model, glmNegBinomial) #too computationally intensive for R
+
+
 ################################
 ##################
 #don't run this#
