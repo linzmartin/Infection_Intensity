@@ -1,5 +1,5 @@
 #analysis of Jordyn's infection intensity data
-#last updated: 08/08/22
+#last updated: 08/24/22
 #available on github
 ###########################################################
 
@@ -39,7 +39,9 @@ require(fitdistrplus)
 
 #import the data:
 II_Data <- read_xlsx("Infection_Intensity_Data_JS_May2022.xlsx",
-                     sheet = "R")
+                     sheet = "R",
+                     #col_types = c("numeric","numeric","numeric",
+                       "numeric","numeric","numeric","numeric"))
                      #col_types = c()) #import all PO Data
 
 #format factors:
@@ -376,6 +378,8 @@ sum(E2^2) / (N - p) #= 0.705 ==== under-dispersion due to neg binomial model
 #https://search.r-project.org/CRAN/refmans/pscl/html/hurdle.html
 #https://data.library.virginia.edu/getting-started-with-hurdle-models/
 #https://www.r-bloggers.com/2013/05/veterinary-epidemiologic-research-count-and-rate-data-zero-counts/
+#https://stats.oarc.ucla.edu/r/dae/negative-binomial-regression/
+#https://stats.oarc.ucla.edu/r/dae/zinb/
 
 library(pscl)
 # count data conditional on the zero hurdle
@@ -441,6 +445,7 @@ z2 <- zeroinfl(CFUs ~ Temperature*Age | ## Predictor for the Poisson process
                dist = 'poisson',
                data = II_Data) #simple model
 
+#z3 is the null neg bin. model
 z3 <- zeroinfl(CFUs ~ Temperature*Age | ## Predictor for the Poisson process
                        1, ## Predictor for the Bernoulli process;
                      dist = 'negbin',
@@ -455,15 +460,87 @@ z5 <- zeroinfl(CFUs ~ Temperature*Age | Temperature+Age ## Predictor for the Poi
                dist = 'negbin',
                data = II_Data)
 
-summary(z1) #not applicable
-summary(z2) #poisson with log link
+z6 <- zeroinfl(CFUs ~ Temperature*Age | Temperature ## Predictor for the Poisson process
+               , ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data)
+z7 <- zeroinfl(CFUs ~ Temperature*Age | Age ## Predictor for the Poisson process
+               , ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data)
+
+#summary(z1) #not applicable
+#summary(z2) #poisson with log link
+
 summary(z3)
 summary(z4) 
 summary(z5)
+summary(z6)
+summary(z7)
 
-#do we need to include the interation term for the second part?
-lrtest(z4,z5) #go with z5 - do not include interaction in 2nd half
+#are predictors important to the model?
+lrtest(z3,z4) #yes, the complex model is better (z4)
 
+#do we need to include the interaction term for the second part of the model?
+lrtest(z4,z5) #NS - go with z5 - do not include interaction in 2nd half
+lrtest(z5,z6) #include age in 2nd half
+lrtest(z5,z7) #NS - can exclude temperature
+
+#null model only for both parts:
+z0 <- update(z5, . ~ 1)
+summary(z0)
+
+lrtest(z0,z5)
+lrtest(z0,z7) #complex model is better than null model
+
+
+
+z8 <- zeroinfl(CFUs ~ Temperature+Age | Age ## Predictor for the Poisson process
+               , ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data)
+
+z9 <- zeroinfl(CFUs ~ Temperature+Age | Temperature+Age ## Predictor for the Poisson process
+               , ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data)
+
+lrtest(z5,z8) 
+lrtest(z7,z8) 
+lrtest(z9,z5) #better to include interaction in count model
+
+#check the dispersion statistic:
+E2 <- resid(z5, type = "pearson")
+N  <- nrow(II_Data)
+p  <- length(coef(z5)) + 1  # '+1' is for variance in NB model
+sum(E2^2) / (N - p) 
+# = 0.976, close to 1 = good
+#closer to 1 than the negative binomial model
+
+
+#################
+#what if we use temperature and age as continuous numeric variables instead of
+#categorical factors?
+
+#this is a choice
+
+
+#first, convert data into continuous format
+II_Data_modified <- II_Data
+
+II_Data_modified$Tempcont <- as.numeric(as.character(II_Data_modified$Temperature))
+II_Data_modified$Agecont <- as.numeric(as.character(II_Data_modified$Age))
+str(II_Data_modified)
+
+
+z10 <- zeroinfl(CFUs ~ Tempcont*Agecont | 1## Predictor for the Poisson process
+               , ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data_modified)
+summary(z10)
+
+glmnegbin <- glm.nb(CFUs ~ Tempcont*Agecont, data=II_Data_modified,link="log")
+summary(glmnegbin)
 ######
 #https://www.jstatsoft.org/article/view/v027i08 source for model estimations
 #compare ML estimators for different models: 
@@ -496,11 +573,11 @@ BIC(z5, hurdle_model)
 summary(z5)
 summary(hurdle_model)
 
+
 fm <- list("ZINB" = z5, "Hurdle-NB" = hurdle_model)
 t(sapply(fm[1:2], function(x) round(x$coefficients$zero, digits = 3)))
 #the coefficients for the zero component are opposite signs (makes sense because models predict probability of positive/negative)
 t(sapply(fm[1:2], function(x) round(exp(x$coefficients$zero), digits = 3)))
-
 
 #install.packages("countreg", repos="http://R-Forge.R-project.org")
 library(countreg)
@@ -532,8 +609,6 @@ comparing_zeros <- c("Obs"=observed_zeros,"ML-Pois"=Pois_zeros,"NB"=NegBin_zeros
 comparing_zeros
 
 
-
-
 #expected mean counts:
 mu_hurdle <- predict(hurdle_model,type="response")
 mu_zinb <- predict(z5, type="response")
@@ -546,13 +621,13 @@ Model_AICs
 
 ###
 #model of choice: zero-inflated
-#one source of zeros, not two separate processes
+#one source of zeros, not two separate processes (unlike the hurdle model)
 ###
 
 #inspect and interpret model summary:
 summary(hurdle_model)
 
-Zero_inflated_neg_binom_model <- z5
+Zero_inflated_neg_binom_model <- z5 #rename for ease
 summary(Zero_inflated_neg_binom_model)
 
 plot(density(II_Data$CFUs))

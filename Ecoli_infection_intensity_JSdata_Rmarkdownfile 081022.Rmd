@@ -199,3 +199,12 @@ II_Summary %>%
   geom_errorbar()+ theme_bw()+
   scale_shape(guide="none") + theme(legend.position = "none")
 ```
+
+## Preliminary Data Analysis
+
+What is the distribution of the data? Are there any correlations? What can we determine from assessing the variance, etc.?
+
+```{r}
+
+```
+
