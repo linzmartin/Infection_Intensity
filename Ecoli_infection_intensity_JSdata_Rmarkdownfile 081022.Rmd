@@ -200,11 +200,23 @@ II_Summary %>%
   scale_shape(guide="none") + theme(legend.position = "none")
 ```
 
-## Preliminary Data Analysis
+## Preliminary Data Analysis and Model Fitting
 
 What is the distribution of the data? Are there any correlations? What can we determine from assessing the variance, etc.?
 
 ```{r}
 
 ```
+
+## Fitting a Zero-Inflated Negative Binomial Distribution
+
+```{r}
+
+```
+
+## Model Interpretation and Visualization
+```{r}
+
+```
+
 

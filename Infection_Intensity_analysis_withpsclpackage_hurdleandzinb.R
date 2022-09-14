@@ -298,12 +298,95 @@ p  <- length(coef(z5)) + 1  # '+1' is for variance in NB model
 sum(E2^2) / (N - p) 
 # = 1.005472, close to 1 = good
 #closer to 1 than the negative binomial model
+###############################################
 
+
+library(boot)
+
+#get start values for each part of the model:
+dput(round(coef(z3, "count"), 4))
+dput(round(coef(z3, "zero"), 4))
+
+f <- function(data, i) {
+  require(pscl)
+  z3 <- zeroinfl(CFUs ~ Temperature*Age | 1,
+                 dist = 'negbin',
+                 data = data[i,],
+                 start = list(count = c(-4.3642, 0.5336, -0.5563,0.024), 
+                              zero = c(-3.4222)))
+  as.vector(t(do.call(rbind, coef(summary(z3)))[, 1:2]))
+}
+
+set.seed(10)
+(res <- boot(II_Data, f, R = 1200, parallel = "snow", ncpus = 4))
+
+head(res)
+
+## basic parameter estimates with percentile and bias adjusted CIs
+parms <- t(sapply(c(1, 3, 5, 9, 11), function(i) {
+  out <- boot.ci(res, index = c(i, i + 1), type = c("perc", "bca"))
+  with(out, c(Est = t0, pLL = percent[4], pUL = percent[5],
+              bcaLL = bca[4], bcaUL = bca[5]))
+}))
+
+## add row names
+as.data.frame(parms)
+row.names(parms) <- names(coef(z3))
+
+## print results
+parms
+
+## compare with normal based approximation
+confint(z3)
+# bootstrapped errors should be larger
+
+###
+#get incident risk ratio (IRR) for negative binomial model or odds ratio (OR) for logit model (zero inflation model)
+
+## exponentiated parameter estimates with percentile and bias adjusted CIs
+expparms <- t(sapply(c(1, 3, 5, 7, 9), function(i) {
+  out <- boot.ci(res, index = c(i, i + 1), type = c("perc", "bca"), h = exp)
+  with(out, c(Est = t0, pLL = percent[4], pUL = percent[5],
+              bcaLL = bca[4], bcaUL = bca[5]))
+}))
+
+
+## add row names
+as.data.frame(expparms)
+row.names(expparms) <- names(coef(z3))
+## print results
+expparms
+
+
+newdata1 <- expand.grid(c(27,30,32), rep(c(1,5,10,15)))
+#newdata1 <- expand.grid(factor(27:32), rep(c(1,5,10,15)))
+
+colnames(newdata1) <- c("Temperature", "Age")
+newdata1$phat <- predict(z3, newdata1)
+newdata1$phatlog <- log(newdata1$phat)
+
+ggplot(newdata1, aes(x = Temperature, y = phat, colour = factor(Age))) +
+  geom_point() +
+  geom_line() +
+  facet_grid(~Age,labeller = labeller(Age=agelabs, Temperature=templabs)) +
+  labs(x = "Temperature", y = "Predicted CFUs vs. Observed CFUs")+
+  geom_point(aes(x=Temperature,y=CFUs),size=(0.5),color="dark gray",data=II_Data)
+  #geom_point(aes(x=Temperature,y=mean_CFUs),color="red",data=II_Summary)+theme_bw()
+
+
+########
+#check the dispersion statistic:
+E2 <- resid(z7, type = "pearson")
+N  <- nrow(II_Data)
+p  <- length(coef(z5)) + 1  # '+1' is for variance in NB model
+sum(E2^2) / (N - p) 
+# = 1.005472, close to 1 = good
+#closer to 1 than the negative binomial model
 
 #############
 
 
-Zero_inflated_neg_binom_model <- z7 #rename for ease
+Zero_inflated_neg_binom_model <- z3 #rename for ease
 summary(Zero_inflated_neg_binom_model)
 
 plot(density(II_Data$CFUs))
@@ -316,3 +399,6 @@ predzinb <- predict(Zero_inflated_neg_binom_model,
                     type="response")
 plot(II_Data$CFUs[II_Data$CFUs!=0],type="b",col="red")
 lines(round(predzinb),col="blue") #predicted values
+
+
+

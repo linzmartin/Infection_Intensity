@@ -46,17 +46,11 @@ II_Data <- read_xlsx("Infection_Intensity_Data_JS_May2022.xlsx",
 str(II_Data)
 II_Data <- as.data.frame(II_Data)
 
-#format factors:
-#II_Data$Temperature <- as.factor(II_Data$Temperature)
-#II_Data$Age <- as.factor(II_Data$Age)
 #Temperature and Age are continuous variables
 II_Data$Block <- as.factor(II_Data$Block) #categorical
 
 #inspect data:
 str(II_Data)
-#levels(II_Data$Age)
-#levels(II_Data$Temperature)
-
 
 ##########################################################
 ########### Graphing the Raw Data ########################
@@ -69,21 +63,6 @@ agelabs <- c("1 day","5 days", "10 days", "15 days")
 names(agelabs)<-c("1","5","10","15")
 
 #Graph 1a: raw data, temp vs. CFUs
-library(dplyr)
-library(magrittr)
-library(plyr)
-?count()
-II_Data %>%
-  count(Temperature,CFUs,Age)%>%
-  ggplot(aes(x=Temperature,y=CFUs))+ 
-  scale_shape_identity(guide="legend")+
-  geom_point()+
-  facet_grid(Temperature, labeller = labeller(Age=agelabs, Temperature=templabs))+
-  labs(title=~italic("E. coli")~" Infection Intensity",
-       x="Temperature (˚C)",parse=TRUE)+
-  ylab(expression(~italic("E. coli")~" CFUs"))+theme_bw()+
-  theme(legend.position = "none")
-
 II_Data %>%
   count(Temperature,CFUs,Age)%>%
   ggplot(aes(x=Temperature,y=CFUs,color=Age))+ 
@@ -96,7 +75,16 @@ II_Data %>%
   theme(legend.position = "none")
 
 II_Data %>%
-  count(Temperature,CFUs,Age)%>%
+  ggplot(aes(x=Temperature,y=CFUs,color=Age))+ 
+  scale_shape_identity(guide="legend")+
+  geom_point()+
+  facet_grid(~Age, labeller = labeller(Age=agelabs, Temperature=templabs))+
+  labs(title=~italic("E. coli")~" Infection Intensity",
+       x="Temperature (˚C)",parse=TRUE)+
+  ylab(expression(~italic("E. coli")~" CFUs"))+theme_bw()+
+  theme(legend.position = "none")
+
+II_Data %>%
   ggplot(aes(x=Age,y=CFUs,color=Temperature))+ 
   scale_shape_identity(guide="legend")+
   geom_point()+
@@ -246,12 +234,13 @@ plot(CFUs ~ Age, data = II_Data)
 plot(CFUs ~ Infectious_Dose, data = II_Data)
 
 #corrected log equation:
-c_log <- function(x) log(x + 0.5) #add 0.5 so values can be log transformed
+c_log <- function(x) log(x + 1) #add 0.5 so values can be log transformed
 
 #take log to visualize:
 plot(c_log(CFUs) ~ Temperature, data = II_Data)
 plot(c_log(CFUs) ~ Age, data = II_Data)
 
+II_Data$logCFUs <- c_log(II_Data$CFUs)
 
 #plot the empirical distribution and density (CDF)
 plotdist(II_Data$CFUs, histo=TRUE,demp=TRUE)
@@ -264,6 +253,7 @@ plotdist(c_log(II_Data$CFUs),histo=TRUE,demp=TRUE)
   # have high variance regardless of bootstrapping
 
 descdist(II_Data$CFUs, boot = 1000)
+descdist(II_Data$logCFUs,boot=500)
 #skewness: 1.431 left skewed
 #kurtosis: 4.26
 
@@ -280,7 +270,8 @@ c(mean=r[1],var=r[2],ratio=r[2]/r[1]) #ratio is 1.2e6 (greater than 1.1 and cons
 #Poisson assumption of equal mean and variance does not hold true
 #use Neg Binom (mean does not equal variance, which is assumed by Poisson dist.
 
-
+r <-  c(mean(II_Data$logCFUs), var(II_Data$logCFUs))
+c(mean=r[1],var=r[2],ratio=r[2]/r[1])
 #######################################################
 #assess fits:
 #check to see if the data follow a poisson distribution
@@ -307,11 +298,21 @@ ppcomp(list(fit_poisson_CFUs,fit_negbinom_CFUs),legendtext = plot.legend)
 gofstat(list(fit_negbinom_CFUs, fit_poisson_CFUs),
         fitnames = c("nbinom", "pois"))
 
-
 #negative binomial model is a much better fit than poisson
-##############
 
-#model fitting:
+#for the log CFUs dist:
+fit_norm_logCFUs <- fitdist((II_Data$logCFUs),"norm")
+summary(fit_norm_logCFUs)
+plot(fit_norm_logCFUs)
+
+#fit_poisson_logCFUs <- fitdist((II_Data$logCFUs),"pois")
+
+fit_exp_logCFUs <- fitdist((II_Data$logCFUs),"exp")
+plot(fit_exp_logCFUs) #not good
+
+
+##############
+##model fitting: 
 #fit Poisson, quasiPoisson, and negative binomial distributions with log link (modeling the mean not the actual data using log link)
 glmPoisson <- glm(CFUs ~ Temperature*Age, data=II_Data, family = poisson(link = "log"))
 glmQuasiPoisson <- glm(CFUs ~ Temperature*Age, data=II_Data, family = quasipoisson(link = "log"))
@@ -328,6 +329,7 @@ summary(glmQuasiPoisson)
 #AIC: NA
 
 summary(glmNegBinomial)
+plot(glmNegBinomial)
 #Residual deviance:  867.08  on 692  degrees of freedom
 #AIC: 18787
 # 2 x log-likelihood:  -18776.9520  
@@ -336,6 +338,7 @@ summary(glmNegBinomial)
 
 
 summary(glmNegBinomial_additive)
+plot(glmNegBinomial_additive)
 #Residual deviance:  868.84  on 693  degrees of freedom
 #AIC: 18801
 #Theta:  0.5455 
@@ -395,6 +398,30 @@ sum(E2^2) / (N - p) #= 0.763 ==== under-dispersion due to neg binomial model
 #may have over-corrected for the zero inflation by using a negative binomial fit --
 #check to see if other fits may be better
 
+#################
+#also check models with logCFUs to see if these may be simpler to use
+glmPoisson <- glm(logCFUs ~ Temperature*Age, data=II_Data, family = poisson(link = "log"))
+plot(glmPoisson)
+
+glmQuasiPoisson <- glm(logCFUs ~ Temperature*Age, data=II_Data, family = quasipoisson(link = "log"))
+summary(glmQuasiPoisson)
+plot(glmQuasiPoisson)
+
+glmNegBinomial <- glm.nb(logCFUs ~ Temperature*Age, data=II_Data,link="log")
+summary(glmNegBinomial)
+plot(glmNegBinomial)
+
+lmlogCFUs <- lm(logCFUs ~ Temperature*Age, data=II_Data)
+summary(lmlogCFUs)
+plot(lmlogCFUs)
+plot(lmlogCFUs$residuals~lmlogCFUs$fitted.values)
+
+pr <- residuals(lmlogCFUs,"pearson")
+phi <- sum(pr^2)/df.residual(lmlogCFUs)
+round(c(phi,sqrt(phi)),4)
+#overdispersion present 
+
+#looking at plots of models - these are not very good - also not really able to transform data that's already log-transformed
 
 ###
 #can use a zero-inflated model or a hurdle model instead to account for excess zeros
@@ -409,175 +436,248 @@ sum(E2^2) / (N - p) #= 0.763 ==== under-dispersion due to neg binomial model
 #https://stats.oarc.ucla.edu/r/dae/negative-binomial-regression/
 #https://stats.oarc.ucla.edu/r/dae/zinb/
 
+#####
+library(pscl)
 
-require(MuMIn)
-require(glmmTMB)
+#try zero-inflated model instead: 
+#can include all covariates in each equation or make a simpler model
 
-#build full zero-inflated neg binom model with glmmTMB
-#nbinom2 = negative binomial where the variance increases quadratically with the mean as σ2 = µ(1 + µ/θ), with θ > 0
-ZINB_full <- glmmTMB(CFUs ~ Temperature*Age, 
-                ziformula = ~ Temperature*Age,
-                data=II_Data, family=nbinom2(link='log'), 
-                na.action = 'na.fail')
+z1 <- zeroinfl(CFUs ~ Temperature*Age | ## Predictor for the Poisson process
+                 Temperature*Age, ## Predictor for the Bernoulli process;
+               dist = 'poisson',
+               data = II_Data)
+#z1 leads to lack of convergence
 
-ms <- dredge(ZINB_full, rank='AIC')
-#convergence problems with full model
+z2 <- zeroinfl(CFUs ~ Temperature*Age | ## Predictor for the Poisson process
+                 1, ## Predictor for the Bernoulli process;
+               dist = 'poisson',
+               data = II_Data) #simple model
+#z2 is the null poisson zero-inflated model
+summary(z2)
 
-head(ms) #this agrees with my stepwise selection: 
-#model should include only age in the ZI component
+#z3 is the null neg bin. zero-inflated model
+z3 <- zeroinfl(CFUs ~ Temperature*Age | ## Predictor for the Poisson process
+                 1, ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data)
+summary(z3)
 
-ZINB_complex <- glmmTMB(CFUs ~ Temperature*Age, 
-                        ziformula = ~ Temperature+Age, 
-                        #REML=TRUE,
-                        data=II_Data, 
-                        family=nbinom2(link='log'), 
-                        na.action = 'na.fail')
+z4 <- zeroinfl(CFUs ~ Temperature*Age | Temperature*Age ## Predictor for the Poisson process
+               , ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data)
+summary(z4)
+#z4 leads to lack of convergence; Std errors of ZI model are too large
 
-ZINB_nullzi <- glmmTMB(CFUs ~ Temperature*Age, 
-                       ziformula = ~ 1, 
-                       #REML=TRUE,
-                       data=II_Data, 
-                       family=nbinom2(link='log'), 
-                       na.action = 'na.fail')
+z5 <- zeroinfl(CFUs ~ Temperature*Age | Temperature+Age ## Predictor for the Poisson process
+               , ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data)
+summary(z5)
+#z5 leads to lack of convergence; Std errors of ZI model  coeff for Intercept and Age are too large
 
-ZINB_simple <- glmmTMB(CFUs ~ Temperature*Age, 
-                       ziformula = ~ Age, 
-                       #REML=TRUE,
-                       data=II_Data, 
-                       family=nbinom2(link='log'), 
-                       na.action = 'na.fail')
+z6 <- zeroinfl(CFUs ~ Temperature*Age | Temperature ## Predictor for the Poisson process
+               , ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data)
+summary(z6)
 
-lrtest(ZINB_complex,ZINB_simple) #ZINB_simple is better
-lrtest(ZINB_simple,ZINB_nullzi) #ZINB_simple is better
+z7 <- zeroinfl(CFUs ~ Temperature*Age | Age ## Predictor for the Poisson process
+               , ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data)
+summary(z7)
 
-summary(ZINB_simple)
-AIC(ZINB_simple)
-logLik(ZINB_simple)
+#z7 leads to lack of convergence; Std errors of ZI model Int and Age are too large
 
-confint(ZINB_simple) ## Wald/delta-method CIs 
+#are predictors important to the model?
+lrtest(z3,z4) #yes, the complex model is better (z4)
 
+#do we need to include the interaction term for the second part of the model?
+lrtest(z4,z5) #NS - go with z5 - do not include interaction in 2nd half
+lrtest(z5,z6) #include age in 2nd half
+lrtest(z5,z7) #NS - can exclude temperature
 
-#check model specs:
-library(DHARMa)
+#null model only for both parts:
+z0 <- update(z5, . ~ 1)
+summary(z0)
 
-diagnose(ZINB_simple)
-#calculate residuals for model:
-#calculates randomized quantile residuals according to the algorithm
-simulationOutput <- simulateResiduals(fittedModel = ZINB_simple, plot = F)
-
-# the plot function runs 4 tests
-# i) KS test i) Dispersion test iii) Outlier test iv) quantile test
-plot(simulationOutput, quantreg = TRUE)
-
-plotResiduals(simulationOutput, form = II_Data$Temperature)
-plotResiduals(simulationOutput, form = II_Data$Age)
-
-#simulationOutput = recalculateResiduals(simulationOutput, group = II_Data$Age)
-
-
-output <- data.frame(resid = resid(ZINB_simple), fitted = fitted(ZINB_simple))
-ggplot(output, aes(fitted, resid)) + geom_jitter(position = position_jitter(width = 0.25), 
-                                                 alpha = 0.5) + stat_smooth(method = "loess")
-
-
-ggplot(output, aes(fitted, resid)) +
-  geom_jitter(position=position_jitter(width=.25), alpha=.5) +
-  stat_quantile(method="rq")
-
-output <- within(output, {
-    broken <- cut(fitted, hist(fitted, plot=FALSE)$breaks)
-  })
-
-ggplot(output, aes(broken, resid)) +
-  geom_boxplot() +
-  geom_jitter(alpha=.25)
+lrtest(z0,z5)
+lrtest(z0,z7) #complex model is better than null model
 
 
+z8 <- zeroinfl(CFUs ~ Temperature+Age | Age ## Predictor for the Poisson process
+               , ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data)
+summary(z8) #overfitting
+
+z9 <- zeroinfl(CFUs ~ Temperature+Age | Temperature+Age ## Predictor for the Poisson process
+               , ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = II_Data) #overfitting
+summary(z9)
+
+lrtest(z5,z8) 
+lrtest(z7,z8) 
+lrtest(z9,z5) #better to include interaction in count model
+
+############
+#try alternate methods for model selection:
+require(pscl)
+require(mpath)
+
+#chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/https://cran.r-project.org/web/packages/mpath/vignettes/static_german.pdf
+
+#stepwise backward selection from full model:
+#be.zeroinfl()
+fitbe_z4 <- be.zeroinfl(z4, data=II_Data, dist="negbin", alpha=0.01, trace=FALSE) 
+summary(fitbe_z4)
+
+cat("log-liklihood of zero-inflated model with backward selection",logLik(fitbe_z4))
+cat("BIC of zero-inflated model with backward selection",AIC(fitbe_z4,k=log(dim(II_Data)[1])))
+fitbe_z4$formula
+#this is model z3 - avoids overfitting of z7 and has relatively low AIC - best choice
 
 
-#################
+######
 ######
 #https://www.jstatsoft.org/article/view/v027i08 source for model estimations
-#compare ML estimators for different models: 
-model_list <- list("ML-Pois" = glmPoisson, "Quasi-Pois" = glmQuasiPoisson, "NB" = glmNegBinomial,
-                   #"Hurdle-NB" = hurdle_model, 
-                   "ZINB" = ZINB_simple)
+#compare Max-liklihood estimators for different models: 
+model_list <- list("ZINB" = z3,"ML-Pois" = glmPoisson, "Quasi-Pois" = glmQuasiPoisson, "NB" = glmNegBinomial)
 
 #inspect estimated regression coefficients for each model:
-sapply(model_list, function(x) coef(x)[1:8])
-
-#library(sandwich)
-#cbind("ML-Pois" = sqrt(diag(vcov(glmPoisson))),
- #     "Adj-Pois" = sqrt(diag(sandwich(glmPoisson))),
-  #    sapply(model_list[1], function(x) sqrt(diag(vcov(x)))[1:8]))
+sapply(model_list, function(x) coef(x)[1:5])
 
 rbind(logLik = sapply(model_list, function(x) round(logLik(x), digits = 0)),
       Df = sapply(model_list, function(x) attr(logLik(x), "df")))
 #ML-Pois and Quasi-Pois can be eliminated
-#better models are NB, Hurdle-NB, and ZINB
-#NB is improved by addition of hurdle or zinb (nearly identical)
+#better models are NB and ZINB
+#NB is improved by addition of zinb 
 
 ######
 
 #how are the zeros captured by the models? 
 gc() #clear memory to make space for computation
-zinb_predictions <- predict(ZINB_simple, type = "zprob") #even more computationally intensive - too large to process in R alone
+
+zinb_predictions <- predict(z3, type = "prob") #even more computationally intensive - too large to process in R alone
 #=22
 str(zinb_predictions)
 summary(zinb_predictions)
-
-as.data.frame(zinb_predictions)
+#as.data.frame(zinb_predictions)
 
 observed_zeros <- round(sum(II_Data$CFUs < 1)) 
 Pois_zeros <- round(sum(dpois(0, fitted(glmPoisson))))
 NegBin_zeros <- round(sum(dnbinom(0, mu = fitted(glmNegBinomial), size = glmNegBinomial$theta)))
 zinb_zeros <- round(sum(zinb_predictions[,1]))
 
-
 comparing_zeros <- c("Obs"=observed_zeros,"ML-Pois"=Pois_zeros,"NB"=NegBin_zeros,"ZINB"=zinb_zeros)
 comparing_zeros
 
 #expected mean counts:
-mu_zinb <- predict(ZINB_simple, type="response")
+mu_zinb <- predict(z3, type="response")
+head(mu_zinb)
 
 #compare AIC values now:
-Model_AICs <- c(PoisAIC = AIC(glmPoisson),NegBinAIC=AIC(glmNegBinomial),ZeroInfl_AIC = AIC(ZINB_simple))
+Model_AICs <- c(PoisAIC = AIC(glmPoisson),NegBinAIC=AIC(glmNegBinomial),ZeroInfl_AIC = AIC(z3))
 Model_AICs
 
+#zero-inflated negative binomial model is best fit
 
+
+plot(z3$fitted.values~z3$residuals)
+
+zinb_model_coef <- z3$coefficients
+
+
+predzinb <-predict(z3,newdata=II_Data[II_Data$CFUs!=0,],type="response")
+plot(II_Data$CFUs[II_Data$CFUs!=0],type="b",col="red") #actual
+lines(round(predzinb),col="blue") #predicted values
+
+########
+#check the dispersion statistic:
+E2 <- resid(z3, type = "pearson")
+N  <- nrow(II_Data)
+p  <- length(coef(z3)) + 1  # '+1' is for variance in NB model
+sum(E2^2) / (N - p) 
+# = 1.015009, close to 1 = good
+#closer to 1 than the negative binomial model
+###############################################
+#choosing the negative binomial zero-inflated model
+
+#########
+#now, use bootstrapping to find confidence intervals and 
+#also to determine risk/odd ratios for the parameter estimates
+
+library(boot)
+
+#get start values for each part of the model:
+dput(round(coef(z3, "count"), 4))
+dput(round(coef(z3, "zero"), 4))
+
+#put these values into the following equation in the function f:
+f <- function(data, i) {
+  require(pscl)
+  z3 <- zeroinfl(CFUs ~ Temperature*Age | 1,
+                 dist = 'negbin',
+                 data = data[i,],
+                 start = list(count = c(-4.3642, 0.5336, -0.5563,0.024), 
+                              zero = c(-3.4222)))
+  as.vector(t(do.call(rbind, coef(summary(z3)))[, 1:2]))
+}
+
+#bootstrap:
+set.seed(10)
+(res <- boot(II_Data, f, R = 1200, parallel = "snow", ncpus = 4))
+#the results alternate the coefficient estimates and their standard errors
+#e.g. t1 is the estimate for the intercept in the conditional model, and t2 is the estimate for its standard error
+
+## basic parameter estimates with percentile and bias adjusted CIs
+#use sapply o extract the parameter estimates and apply function:
+parms <- t(sapply(c(1, 3, 5, 9, 11), function(i) {
+  out <- boot.ci(res, index = c(i, i + 1), type = c("perc", "bca"))
+  with(out, c(Est = t0, pLL = percent[4], pUL = percent[5],
+              bcaLL = bca[4], bcaUL = bca[5]))
+}))
+
+## add row names
+as.data.frame(parms)
+row.names(parms) <- names(coef(z3))
+
+## print results for confidence intervals:
+parms
+
+## compare with normal based approximation
+confint(z3) # bootstrapped errors should be larger
+
+###
+#now, follow similar procedure - exponentiate estimates (using log)
+#get incident risk ratio (IRR) for negative binomial model (non-zeros)
+#get odds ratio (OR) for logit model (zero component) (zero inflation model)
+
+## exponentiated parameter estimates with percentile and bias adjusted CIs
+expparms <- t(sapply(c(1, 3, 5, 7, 9), function(i) {
+  out <- boot.ci(res, index = c(i, i + 1), type = c("perc", "bca"), h = exp)
+  with(out, c(Est = t0, pLL = percent[4], pUL = percent[5],
+              bcaLL = bca[4], bcaUL = bca[5]))
+}))
+
+
+## add row names
+as.data.frame(expparms)
+row.names(expparms) <- names(coef(z3))
+## print results
+expparms
 
 #########################
-#plot model predictions:
-newdata <- unique(II_Data[,c("Temperature","Age")]) 
-
-predszi <- predict(ZINB_simple, newdata, se.fit=TRUE, type="response") 
-predszi <- predict(ZINB_nullzi, newdata, se.fit=TRUE, type="response")
-predsnb <- predict(glmNegBinomial,newdata,se.fit=TRUE,type="response")
-
-newdata$predFE = predszi$fit 
-newdata$predFE = predsnb$fit
-
-newdata$predFE.min = predszi$fit-1.98*predszi$se.fit 
-newdata$predFE.max = predszi$fit+1.98*predszi$se.fit 
-
-newdata$predFE.min = predsnb$fit-1.98*predsnb$se.fit 
-newdata$predFE.max = predsnb$fit+1.98*predsnb$se.fit 
-#negbinpreds <- predict(glmNegBinomial, newdata, se.fit=TRUE, type="response") 
-#newdata$predFE <- negbinpreds$fit
+newdata1 <- expand.grid(c(27,30,32), rep(c(1,5,10,15)))
 
 
-require(plyr)
-real <- ddply(II_Data, ~Temperature+Age, summarize, m=mean(CFUs)) 
+colnames(newdata1) <- c("Temperature", "Age")
+newdata1$phat <- predict(z3, newdata1)
+#newdata1$phatlog <- log(newdata1$phat)
 
-ggplot(newdata, aes(x=Temperature, y=predFE, colour=factor(Age)))+
-  geom_point() + facet_grid(~Age,labeller = labeller(Age=agelabs, Temperature=templabs))+
-  geom_errorbar(aes(ymin=predFE.min, ymax=predFE.max)) + 
-  geom_point(data=real, aes(x=Temperature, y=m,color="red"))+ 
-  geom_point(aes(x=Temperature,y=CFUs),size=(0.5),color="dark gray",data=II_Data)+
-  theme_bw()+
-  ylab("Average CFUs") + xlab("Temp")
-
-
+newdata1
 
 ggplot(newdata1, aes(x = Temperature, y = phat, colour = factor(Age))) +
   geom_point() +
@@ -586,16 +686,23 @@ ggplot(newdata1, aes(x = Temperature, y = phat, colour = factor(Age))) +
   labs(x = "Temperature", y = "Predicted CFUs vs. Observed CFUs")+
   geom_point(aes(x=Temperature,y=CFUs),size=(0.5),color="dark gray",data=II_Data)+
   geom_point(aes(x=Temperature,y=mean_CFUs),color="red",data=II_Summary)+
+  geom_point(aes(x=Temperature,y=median_CFUs),color="blue",data=II_Summary)+
+  #geom_errorbar(aes(ymin=predFE.min, ymax=predFE.max)) +
   theme_bw()
-
-
-
-
 
 
 ##############
 
+#are the z3 model parameters important? yes.
+library(car)
+Anova(z3,
+      type="II",
+      test="Chisq")
 
+#is z3 model better than the null zi model?
+library(rcompanion)
+nagelkerke(z3) #yes
+##############
 
 #Neg binomial with log link regression coefficients for each of the variables along 
 #with standard errors, z-scores, and p-values 
@@ -603,8 +710,26 @@ ggplot(newdata1, aes(x = Temperature, y = phat, colour = factor(Age))) +
 #This includes binomial logit coefficients for predicting excess zeros along 
 #with their standard errors, z-scores, and p-values.
 
-#is this model better than the negative binomial model alone (non-hurdle)?
-#?vuong() Vuong non-nested test compares models that don't nest with likelihood ratios
-#vuong(hurdle_model, glmNegBinomial) #too computationally intensive for R
+###################################
+
+II_Data_27C <- subset(II_Data,Temperature==27)
+II_Data_30C <- subset(II_Data,Temperature==30) 
+II_Data_32C <- subset(II_Data,Temperature==32)
 
 
+lm27 <- lm(CFUs~Age,data=II_Data_27C)
+Anova(lm27,type=2)
+ggplot(aes(x=Age,y=CFUs),data=II_Data_27C)+
+  geom_point()
+plot(lm27)
+
+lm30 <- lm(CFUs~Age,data=II_Data_30C)
+plot(lm30)
+
+lm32 <- lm(CFUs~Age,data=II_Data_32C)
+plot(lm32)
+
+#plot the empirical distribution and density (CDF)
+plotdist(II_Data_27C$CFUs, histo=TRUE,demp=TRUE)
+plotdist(II_Data_30C$CFUs, histo=TRUE,demp=TRUE)
+plotdist(II_Data_32C$CFUs, histo=TRUE,demp=TRUE)

@@ -4,6 +4,13 @@
 #raw means may be biased due to different number of observations in each group
 require(modelbased)
 
+####
+#Caveat - need to have categorical data: convert to factors
+#format factors:
+II_Data$Temperature <- as.factor(II_Data$Temperature)
+II_Data$Age <- as.factor(II_Data$Age)
+####
+
 model_mm_1 <- lm(CFUs ~ Temperature*Age, data = II_Data)
 Anova(model_mm_1)
 means1 <- estimate_means(model_mm_1)
