@@ -1,0 +1,56 @@
+TO DO:
+
+put new code in R markdown
+rerun R markdown
+Save all in Box
+
+make lab meeting presentation
+
+----------
+
+COMPLETED: 
+*fix CI estimates - include 7 for interaction instead of 9 for theta
+*re-run to replace categorical output for AICs/loglik
+
+
+* what number of zeros for each group (as in predict non-zero values) by category
+*No zeros are predicted by model - 
+Model does show whether or not an exisiting zero has a probability of being excess or predicted
+
+
+Group predictions by temperature
+
+
+separate effects of temp and age in interaction term??
+make interaction plot
+
+--------
+----------
+----------
+
+PRESENTATION
+
+Problem and what's causing problem
+zeros and non-signif
+
+why include zeros
+
+Question: we know it's infected, how is infection intensity impacted by T*A
+
+find model to include zeros
+
+
+approach:
+- usu Poisson
+- Neg bin doesn't help with zeros
+- fit with zero-inflation - two component model
+
+
+Model output
+what it means
+
+predictions + zero predictions
+
+Summary figure for predictions vs. actual data
+
+Main message

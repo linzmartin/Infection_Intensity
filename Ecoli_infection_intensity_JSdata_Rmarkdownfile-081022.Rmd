@@ -1,9 +1,16 @@
-#analysis of Jordyn's infection intensity data
-#last updated: 08/24/22
-#available on github
-###########################################################
+---
+title: "Infection Intensity Data Analysis"
+author: "Lindsay E. Martin"
+date: "2022-08-10"
+output:
+  html_document: default
+  pdf_document: default
+editor_options:
+  markdown:
+    wrap: 72
+---
 
-####################################
+```{r setup}
 # clear existing workspace
 rm(list = ls(all = TRUE))
 graphics.off()
@@ -12,9 +19,7 @@ shell("cls")
 #set wd to your project folder
 #setwd("C:/Users/linzm/'OneDrive - Vanderbilt'/Hillyer_Lab/Infection_Intensity") #modfiy this as need be
 getwd() #check working directory
-###########################
 
-#####################
 #load libraries needed:
 library(readxl)
 library(writexl)
@@ -35,35 +40,46 @@ library(lmtest)
 library(sandwich)
 require(foreign)
 require(fitdistrplus)
-require(RColorBrewer)
-##############################
+
+library(pscl)
+
 
 #import the data:
 II_Data <- read_xlsx("Infection_Intensity_Data_JS_May2022.xlsx",
-                     sheet = "R",
-                     col_types = c("numeric","numeric","numeric",
-                      "numeric","numeric","numeric","numeric"))
+                     sheet = "R")
+                     #col_types = c()) #import all PO Data
 
-str(II_Data)
-II_Data <- as.data.frame(II_Data)
-
+#format factors:
 #Temperature and Age are continuous variables
-II_Data$Block <- as.factor(II_Data$Block) #categorical
+II_Data$Block <- as.factor(II_Data$Block)
 
-#inspect data:
 str(II_Data)
 
-##########################################################
-########### Graphing the Raw Data ########################
-##########################################################
 #create labels for axes
 templabs <- c("27˚C","30˚C","32˚C")
 names(templabs)<- c("27","30","32")
 
 agelabs <- c("1 day","5 days", "10 days", "15 days")
 names(agelabs)<-c("1","5","10","15")
+```
 
-#Graph 1a: raw data, temp vs. CFUs
+## Exploring the Data
+
+First, we will plot the data to see what it looks like for each
+temperature-age combination.
+
+```{r}
+II_Data %>%
+  count(Temperature,CFUs,Age)%>%
+  ggplot(aes(x=Temperature,y=CFUs,color=Age))+ 
+  scale_shape_identity(guide="legend")+
+  geom_point()+
+  facet_grid(Temperature~Age, labeller = labeller(Age=agelabs, Temperature=templabs))+
+  labs(title=~italic("E. coli")~" Infection Intensity",
+       x="Temperature (˚C)",parse=TRUE)+
+  ylab(expression(~italic("E. coli")~" CFUs"))+theme_bw()+
+  theme(legend.position = "none")
+
 II_Data %>%
   count(Temperature,CFUs,Age)%>%
   ggplot(aes(x=Temperature,y=CFUs,color=Age))+ 
@@ -76,16 +92,7 @@ II_Data %>%
   theme(legend.position = "none")
 
 II_Data %>%
-  ggplot(aes(x=Temperature,y=CFUs,color=Age))+ 
-  scale_shape_identity(guide="legend")+
-  geom_point()+
-  facet_grid(~Age, labeller = labeller(Age=agelabs, Temperature=templabs))+
-  labs(title=~italic("E. coli")~" Infection Intensity",
-       x="Temperature (˚C)",parse=TRUE)+
-  ylab(expression(~italic("E. coli")~" CFUs"))+theme_bw()+
-  theme(legend.position = "none")
-
-II_Data %>%
+  count(Temperature,CFUs,Age)%>%
   ggplot(aes(x=Age,y=CFUs,color=Temperature))+ 
   scale_shape_identity(guide="legend")+
   geom_point()+
@@ -125,13 +132,13 @@ II_Data %>%
   labs(title=~italic("E. coli")~" Infection Intensity",
        x="Temperature (˚C)")+
   ylab(expression(~italic("E. coli")~" CFUs"))+
-  geom_boxplot(notch = FALSE)+theme_bw()+
+  geom_boxplot(notch = TRUE)+theme_bw()+
   geom_dotplot(binaxis='y', stackdir='center', dotsize=0.5)+
   theme(legend.position = "none")
 
 #Graph 2b: box plot of raw data, temp vs. CFUs
 II_Data %>%
-  ggplot(aes(x=Age,y=CFUs,color=Temperature))+
+  ggplot(aes(x=Age,y=CFUs,color=Temperature,group=Age))+
   facet_grid(Temperature~Age, labeller = labeller(Age=agelabs, Temperature=templabs))+
   labs(title=~italic("E. coli")~" Infection Intensity",
        x="Adult Age (days post eclosion)")+
@@ -142,7 +149,7 @@ II_Data %>%
   theme(legend.position = "none")
 
 II_Data %>%
-  ggplot(aes(x=Age,y=CFUs,color=Temperature))+
+  ggplot(aes(x=Age,y=CFUs,color=Temperature,group = Temperature))+
   facet_grid(~Temperature, labeller = labeller(Age=agelabs, Temperature=templabs))+
   labs(title=~italic("E. coli")~" Infection Intensity",
        x="Adult Age (days post eclosion)")+
@@ -150,7 +157,13 @@ II_Data %>%
   geom_boxplot(notch = TRUE)+theme_bw()+
   #geom_dotplot(binaxis='y', stackdir='center', dotsize=0.5)+
   theme(legend.position = "none")
+```
 
+## Data Summary Figures
+
+Then, we can calculate the mean, median, SE, SD for further exploration.
+
+```{r}
 #calculate the mean, median, SE, sd, etc.:
 II_Summary <- II_Data %>%
   group_by(Temperature,Age) %>%
@@ -160,8 +173,12 @@ II_Summary <- II_Data %>%
             n_CFUs = n(),
             SE_CFUs = sd(CFUs)/sqrt(n()))
 
-head(II_Summary)
+II_Summary
+```
 
+We can graph the arithmetic means with standard errors:
+
+```{r}
 #arithmetic means graphed:
 II_Summary %>%
   count(Temperature,mean_CFUs,Age,SE_CFUs)%>%
@@ -175,6 +192,7 @@ II_Summary %>%
   geom_errorbar()+ theme_bw()+
   scale_shape(guide="none") + theme(legend.position = "none")
 
+head(II_Summary)
 
 II_Summary %>%
   count(Temperature,mean_CFUs,Age,SE_CFUs)%>%
@@ -199,43 +217,78 @@ II_Summary %>%
   ylab(expression(~italic("E. coli")~" CFUs"))+
   geom_errorbar()+ theme_bw()+
   scale_shape(guide="none") + theme(legend.position = "none")
+```
 
-#################################
+## Preliminary Data Analysis and Model Fitting
 
+What is the distribution of the data? Are there any correlations? What
+can we determine from assessing the variance, etc.?
+
+We are not log-transforming the data because of the zero values at 27C,
+but we don't want to exclude this data either.
+
+Common models for count data include the negative binomial regression,
+zero-inflated regression, and Poisson regression.
+
+Helpful resources:
+
+Delignette-Muller, M. L., & Dutang, C. (2015). fitdistrplus: An R
+Package for Fitting Distributions. Journal of Statistical Software,
+64(4), 1--34. Alexander, N., 2012. Review: analysis of parasite and
+other skewed counts. Tropical Medicine & International Health 17,
+684--693.. <doi:10.1111/j.1365-3156.2012.02987.x>
+<https://doi.org/10.18637/jss.v064.i04>
+<https://data.princeton.edu/wws509/r/overdispersion>
+<https://fukamilab.github.io/BIO202/04-C-zero-data.html>
+<https://stats.oarc.ucla.edu/r/dae/negative-binomial-regression/>
+<https://www.jstatsoft.org/article/view/v027i08>
+
+```{r}
 #check for correlations
 require(GGally)
 ggpairs(II_Data[,c('Temperature','Age','CFUs')])
 ggpairs(II_Data[,c('Temperature','Age')])
 
-##################################
-#data analysis info:
-#Alexander, N., 2012. Review: analysis of parasite and other skewed counts. Tropical Medicine & International Health 17, 684–693.. doi:10.1111/j.1365-3156.2012.02987.x
+```
 
-#we are not log-transforming the data because of the zero values at 27C
+Plot histograms of the data and subsetted data.
 
-#possible models: negative binomial regression, zero-inflated regression, Poisson
-
-
-####################################################
-#Distribution of data and model fitting:
-#what distribution does the data follow?
-#are the count data overdispersed?
-
-#citation:
-#Delignette-Muller, M. L., & Dutang, C. (2015). fitdistrplus: An R Package for Fitting Distributions. Journal of Statistical Software, 64(4), 1–34. https://doi.org/10.18637/jss.v064.i04
-#https://data.princeton.edu/wws509/r/overdispersion
-#https://fukamilab.github.io/BIO202/04-C-zero-data.html 
-#https://stats.oarc.ucla.edu/r/dae/negative-binomial-regression/
-#https://www.jstatsoft.org/article/view/v027i08
-
+```{r}
 #plot a histogram of the data:
 plot(table(II_Data$CFUs),xlab = "CFUs",ylab="count",data=II_Data)
 plot(CFUs ~ Temperature, data = II_Data)
 plot(CFUs ~ Age, data = II_Data)
 plot(CFUs ~ Infectious_Dose, data = II_Data)
 
+
+#subset data by temperature
+II_Data_27C <- subset(II_Data,Temperature==27)
+II_Data_30C <- subset(II_Data,Temperature==30) 
+II_Data_32C <- subset(II_Data,Temperature==32)
+
+#plot the empirical distribution and density (CDF)
+plotdist(II_Data_27C$CFUs, histo=TRUE,demp=TRUE)
+plotdist(II_Data_30C$CFUs, histo=TRUE,demp=TRUE)
+plotdist(II_Data_32C$CFUs, histo=TRUE,demp=TRUE)
+
+```
+
+CFU data varies with Temp and Age, but not infectious dose. There also
+seem to be a large number of zero count values.
+
+```{r}
+#what percent of the data is made up of zeros?
+100*sum(II_Data$CFUs ==0)/nrow(II_Data) #3.16%
+```
+
+3.16% of the data is made of zero-CFU counts.
+
+What happens if we do a log(x+1) transformation to the CFU data?
+
+```{r}
+
 #corrected log equation:
-c_log <- function(x) log(x + 1) #add 0.5 so values can be log transformed
+c_log <- function(x) log(x + 1) #add 1.0 so values can be log transformed
 
 #take log to visualize:
 plot(c_log(CFUs) ~ Temperature, data = II_Data)
@@ -243,37 +296,48 @@ plot(c_log(CFUs) ~ Age, data = II_Data)
 
 II_Data$logCFUs <- c_log(II_Data$CFUs)
 
+
+```
+
+Now, plot the empirical distribution and densities for the CFU and
+log(x+1) transformed CFU data. Follow up with descriptive statistics of
+the data -
+
+```{r}
 #plot the empirical distribution and density (CDF)
 plotdist(II_Data$CFUs, histo=TRUE,demp=TRUE)
 
 plotdist(c_log(II_Data$CFUs),histo=TRUE,demp=TRUE)
 
 #descriptive statistics of the data and graph
-#estimating skewness and kurtosis, using bootstrap samples 
-  #(constructed by random sampling with replacement from original data set) 
-  # have high variance regardless of bootstrapping
-
 descdist(II_Data$CFUs, boot = 1000)
-descdist(II_Data$logCFUs,boot=500)
-#skewness: 1.431 left skewed
-#kurtosis: 4.26
+```
 
-#what percent of the data is made up of zeros?
-100*sum(II_Data$CFUs ==0)/nrow(II_Data) #3.16%
+We are estimating skewness and kurtosis, using bootstrap samples. This
+is constructed by random sampling with replacement from original data
+set. There is high variance regardless of bootstrapping.
 
+How does the variance compare to the mean of the CFU data?
 
+```{r}
 #check mean and variance of CFU data
 ggplot(II_Data, aes(x=CFUs)) + 
   geom_histogram(bins = 100)
 
 r <- c(mean(II_Data$CFUs), var(II_Data$CFUs))
 c(mean=r[1],var=r[2],ratio=r[2]/r[1]) #ratio is 1.2e6 (greater than 1.1 and considered large / overdispersed)
-#Poisson assumption of equal mean and variance does not hold true
-#use Neg Binom (mean does not equal variance, which is assumed by Poisson dist.
+```
 
-r <-  c(mean(II_Data$logCFUs), var(II_Data$logCFUs))
-c(mean=r[1],var=r[2],ratio=r[2]/r[1])
-#######################################################
+Poisson assumption of equal mean and variance does not hold true. The
+variance is greater than the mean (ratio = 1.2e6) and is considered
+over-dispersed.
+
+This suggests a Neg Binom model may be better (mean does not equal
+variance, which is assumed by Poisson dist).
+
+First, we'll look at the Poisson dist and Neg Bin dist.
+
+```{r}
 #assess fits:
 #check to see if the data follow a poisson distribution
 fit_poisson_CFUs <- fitdist((II_Data$CFUs),"pois")
@@ -310,8 +374,9 @@ plot(fit_norm_logCFUs)
 
 fit_exp_logCFUs <- fitdist((II_Data$logCFUs),"exp")
 plot(fit_exp_logCFUs) #not good
+```
 
-
+```{r}
 ##############
 ##model fitting: 
 #fit Poisson, quasiPoisson, and negative binomial distributions with log link (modeling the mean not the actual data using log link)
@@ -319,7 +384,9 @@ glmPoisson <- glm(CFUs ~ Temperature*Age, data=II_Data, family = poisson(link = 
 glmQuasiPoisson <- glm(CFUs ~ Temperature*Age, data=II_Data, family = quasipoisson(link = "log"))
 glmNegBinomial <- glm.nb(CFUs ~ Temperature*Age, data=II_Data,link="log")
 glmNegBinomial_additive <- glm.nb(CFUs ~ Temperature+Age, data=II_Data,link="log") #leaves out interaction term
+```
 
+```{r}
 #check models:
 summary(glmPoisson) 
 #Residual deviance: 342540627  on 692  degrees of freedom
@@ -346,6 +413,15 @@ plot(glmNegBinomial_additive)
 #Std. Err.:  0.0250
 # 2 x log-likelihood:  -18793.1080 
 
+```
+
+So far, it looks like the negative binomial distribution is the better
+fit.
+
+Does this match the assumption of overdispersion in the Poisson model?
+How does the negative binomial model compare to the poisson model?
+
+```{r}
 
 ###
 #checking for overdispersion in Poisson model:
@@ -423,21 +499,31 @@ round(c(phi,sqrt(phi)),4)
 #overdispersion present 
 
 #looking at plots of models - these are not very good - also not really able to transform data that's already log-transformed
+```
 
-###
-#can use a zero-inflated model or a hurdle model instead to account for excess zeros
+It looks like the negative binomial model over-corrects for the
+overdisperison and that it does not properly account for the excess zero
+CFU values.
 
-#https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5628625/#:~:text=Structural%20zeros%20refer%20to%20zero,zero%20due%20to%20sampling%20variability.
-#https://lanzaroark.org/docs/zero.pdf
-#https://www.jstatsoft.org/article/view/v027i08 
-#https://m-clark.github.io/models-by-example/hurdle.html
-#https://search.r-project.org/CRAN/refmans/pscl/html/hurdle.html
-#https://data.library.virginia.edu/getting-started-with-hurdle-models/
-#https://www.r-bloggers.com/2013/05/veterinary-epidemiologic-research-count-and-rate-data-zero-counts/
-#https://stats.oarc.ucla.edu/r/dae/negative-binomial-regression/
-#https://stats.oarc.ucla.edu/r/dae/zinb/
+## Fitting a Zero-Inflated Negative Binomial Distribution
 
-#####
+We can try fitting a zero-inflated poisson or negative binomial model
+instead. This is a two part model that predicts (1) the probability of
+having a zero or not (binomial, log link) and (2) the estimate when it
+is not zero (poisson or negative binomial, log link).
+
+Helpful resources:
+<https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5628625/#>:\~:text=Structural%20zeros%20refer%20to%20zero,zero%20due%20to%20sampling%20variability.
+<https://lanzaroark.org/docs/zero.pdf>
+<https://www.jstatsoft.org/article/view/v027i08>
+<https://m-clark.github.io/models-by-example/hurdle.html>
+<https://search.r-project.org/CRAN/refmans/pscl/html/hurdle.html>
+<https://data.library.virginia.edu/getting-started-with-hurdle-models/>
+<https://www.r-bloggers.com/2013/05/veterinary-epidemiologic-research-count-and-rate-data-zero-counts/>
+<https://stats.oarc.ucla.edu/r/dae/negative-binomial-regression/>
+<https://stats.oarc.ucla.edu/r/dae/zinb/>
+
+```{r}
 library(pscl)
 
 #try zero-inflated model instead: 
@@ -491,6 +577,15 @@ summary(z7)
 
 #z7 leads to lack of convergence; Std errors of ZI model Int and Age are too large
 
+```
+
+## Model Selection
+
+Which zero-inflated negative binomial model is better? Is the
+zero-inflated negative binomial model better than a regular negative
+binomial model?
+
+```{r}
 #are predictors important to the model?
 lrtest(z3,z4) #yes, the complex model is better (z4)
 
@@ -523,34 +618,44 @@ lrtest(z5,z8)
 lrtest(z7,z8) 
 lrtest(z9,z5) #better to include interaction in count model
 
+```
+
+```{r}
 ############
 #try alternate methods for model selection:
 require(pscl)
 require(mpath)
 
+zfull <- zeroinfl(CFUs ~ Temperature*Age | Temperature*Age ## Predictor for the Poisson process
+                  , ## Predictor for the Bernoulli process;
+ dist = 'negbin', data = II_Data)
+
 #chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/https://cran.r-project.org/web/packages/mpath/vignettes/static_german.pdf
 
 #stepwise backward selection from full model:
 #be.zeroinfl()
-fitbe_z4 <- be.zeroinfl(z4, data=II_Data, 
-                        dist="negbin", alpha=0.01, trace=FALSE) 
+fitbe_z4 <- be.zeroinfl(zfull, data=II_Data, dist="negbin", alpha=0.01) 
 summary(fitbe_z4)
 
-summaryfitbe_z4 <- summary(fitbe_z4)
-#summaryfitbe_z4
+#summarystepwise <-  #read.table('stepwiseselectionmodel.txt',sep='\t')
 
-
-
-capture.output(summaryfitbe_z4, file = "stepwiseselectionmodel.txt")
-
+#this is model z3
 cat("log-liklihood of zero-inflated model with backward selection",logLik(fitbe_z4))
 cat("BIC of zero-inflated model with backward selection",AIC(fitbe_z4,k=log(dim(II_Data)[1])))
+
 fitbe_z4$formula
 #this is model z3 - avoids overfitting of z7 and has relatively low AIC - best choice
 
 
-######
-######
+```
+
+The stepwise backward selection suggests the null zero-inflation
+component is the simplest, best fit model - this avoids lack of
+convergence.
+
+Compare the models:
+
+```{r}
 #https://www.jstatsoft.org/article/view/v027i08 source for model estimations
 #compare Max-liklihood estimators for different models: 
 model_list <- list("ML-Pois" = glmPoisson, "Quasi-Pois" = glmQuasiPoisson, "NB" = glmNegBinomial,"ZINB" = z3)
@@ -560,127 +665,46 @@ sapply(model_list, function(x) coef(x)[1:5])
 
 rbind(logLik = sapply(model_list, function(x) round(logLik(x), digits = 0)),
       Df = sapply(model_list, function(x) attr(logLik(x), "df")))
+
+#compare AIC values now:
+Model_AICs <- c(PoisAIC = AIC(glmPoisson),NegBinAIC=AIC(glmNegBinomial),ZeroInfl_AIC = AIC(z3))
+Model_AICs
 #ML-Pois and Quasi-Pois can be eliminated
 #better models are NB and ZINB
 #NB is improved by addition of zinb 
+```
 
+### The negative binomial model is improved by the addition of the zero-inflation component.
+
+The ZINB model has a larger log-liklihood (less negative value) and
+smaller AIC value.
+
+```{r}
 ######
-
 #how are the zeros captured by the models? 
-gc() #clear memory to make space for computation
+#gc() #clear memory to make space for computation
 
-zinb_predictions <- predict(z3, type = "prob") #even more computationally intensive - too large to process in R alone
-#=22
-str(zinb_predictions)
-#type=prob gives probabilities of counts
-#22/696 = 0.03
-#create data frame for predictions:
-newdata1 <- expand.grid(c(27,30,32), rep(c(1,5,10,15)))
-colnames(newdata1) <- c("Temperature", "Age")
+#zinb_predictions <- predict(z3, type = "prob") #even more computationally intensive - too large to process in R alone
 
-#newdata1$zinbprobatzero <-predict(z3,newdata1,type="prob",at=c(0,24434,10000,15000,100000,400000))
-#str(newdata1)
+#str(zinb_predictions)
+#summary(zinb_predictions)
+#as.data.frame(zinb_predictions)
 
-#what can we predict with the model? 
-#we can predict the response with and without a zero-inflation component, the probability of the CFU observation, probability of an excess zero
-newdata1$count <- predict(z3, newdata1, type="count") #predicted response w/o zero inflation
-newdata1$response <- predict(z3, newdata1, type="response") #predicted response (numerical) w/ zero inflation
-newdata1$excesszeroprob <- predict(z3,newdata1,type="zero") #predicted predicted probabilities of zero component
-newdata1$diffwzi <- (newdata1$count - newdata1$response) #this is the difference between the outcome with and without accounting for zero-inflation
-
-###
-#https://stackoverflow.com/questions/22314921/no-zeros-predicted-from-zeroinfl-object-in-r
-#https://search.r-project.org/CRAN/refmans/pscl/html/predict.zeroinfl.html
-
-#identify which samples had zero CFU counts in the original dataset:
-zerosindata <- II_Data$CFUs==0
-summary(zerosindata)
-
-zerodata <- II_Data[which(zerosindata),]
-zerodata
-row.names(zerodata) #extract these row names (sample ID)
-
-#now, we can predict the probability of an excess zero vs. a zero predicted by the neg bin regression model
-#and we can filter out these probabilities for the data that had real zero observations (above)
-
-pzero <- predict(z3,type="zero") #prob excess zeros
-
-proportion_prob_excess_vs_structural <- pzero / zinb_predictions[,1] #this is the proportion of predicted probability of a zero that is excess versus structural (regression) 
-
-probzerobyregression <- zinb_predictions[,1]-pzero #this gives the prob of a zero beyond the probability of an excess zero
-as.data.frame(probzerobyregression)
-
-zeroprobchart <- probzerobyregression[(row.names(zerodata))] #extract the rows that are samples with real zeros (see above)
-table_prob_zeronotexcess_forgivenzeros <- cbind(zerodata,zeroprobchart) #add sample info
-
-II_Data_wprobstructuralzero <- cbind(II_Data,probzerobyregression)
-
-II_Data_wprobstructuralzero$excessprob <- 1 - II_Data_wprobstructuralzero$probzerobyregression
-
-#plot these comparisons:
-
-#plot probability that the zero is structural (predicted by the regression)
-#ggplot(table_prob_zeronotexcess_forgivenzeros, aes(x = Temperature, y = zeroprobchart, colour = factor(Age))) +
-#  geom_point() +
-#  facet_grid(~Age,labeller = labeller(Age=agelabs, Temperature=templabs)) +
-#  labs(x = "Temperature", y = "Prob zero is structural")+
-#  theme_bw()
-
-#plot the probability of a zero being an excess zero for each temp/age combo:
-ggplot(II_Data_wprobstructuralzero, aes(x = Temperature, y = excessprob, colour = factor(Age))) +
-  geom_point() + geom_jitter()+
-  geom_point(aes(x=Temperature,y=excessprob,colour=factor(Age),group=Temperature))+
-  facet_wrap(~Age,labeller = labeller(Age=agelabs, Temperature=templabs)) +
-  labs(x = "Temperature (˚C)", y = "Probability of an excess zero")+
-  theme_bw()+
-  labs(title="Probability that a CFU value of zero is excess rather than \nstructural (expected by the regression)")+
-  scale_x_continuous(breaks = c(27,30,32))+
-  theme(legend.position = "none")
-
-#newdata1$diffwzi 
-ggplot(newdata1, aes(x=Temperature,y=diffwzi))+
-  geom_bar(aes(fill=Age),
-         stat="identity",show.legend = FALSE)+
-  scale_x_continuous(breaks = c(27,30,32))+
-  facet_wrap(~Age,labeller = labeller(Age=agelabs, Temperature=templabs)) +
-  theme(legend.position = "none")+
-  labs(x = "Temperature (˚C)", y = "Difference in Expected CFU Count")+
-  theme_bw()+
-  labs(title="Difference in Expected CFU Count \n(No zero inflation expected CFUs - Zero-inflation expected CFUs)")
-  
-
-
-
-
-#####
-#compare total counts of zero observations for real data vs. diff models:
 observed_zeros <- round(sum(II_Data$CFUs < 1)) 
 Pois_zeros <- round(sum(dpois(0, fitted(glmPoisson))))
 NegBin_zeros <- round(sum(dnbinom(0, mu = fitted(glmNegBinomial), size = glmNegBinomial$theta)))
-zinb_zeros <- round(sum(zinb_predictions[,1]))
+#zinb_zeros <- round(sum(zinb_predictions[,1])) #=22
+zinb_zeros <- 22
 
 comparing_zeros <- c("Obs"=observed_zeros,"ML-Pois"=Pois_zeros,"NB"=NegBin_zeros,"ZINB"=zinb_zeros)
 comparing_zeros
-#####
 
 #expected mean counts:
 mu_zinb <- predict(z3, type="response")
 head(mu_zinb)
 
-#compare AIC values now:
-Model_AICs <- c(PoisAIC = AIC(glmPoisson),NegBinAIC=AIC(glmNegBinomial),ZeroInfl_AIC = AIC(z3))
-Model_AICs
-
 #zero-inflated negative binomial model is best fit
 
-
-plot(z3$fitted.values~z3$residuals)
-
-predzinb <-predict(z3,newdata=II_Data[II_Data$CFUs!=0,],type="response")
-plot(II_Data$CFUs[II_Data$CFUs!=0],type="b",col="red") #actual
-lines(round(predzinb),col="blue") #predicted values
-
-########
 #check the dispersion statistic:
 E2 <- resid(z3, type = "pearson")
 N  <- nrow(II_Data)
@@ -688,10 +712,59 @@ p  <- length(coef(z3)) + 1  # '+1' is for variance in NB model
 sum(E2^2) / (N - p) 
 # = 1.015009, close to 1 = good
 #closer to 1 than the negative binomial model
-###############################################
-#choosing the negative binomial zero-inflated model
 
-#########
+
+
+#are the z3 model parameters important? yes.
+library(car)
+Anova(z3,
+      type="II",
+      test="Chisq")
+
+#is z3 model better than the null zi model?
+library(rcompanion)
+nagelkerke(z3) #yes
+```
+
+Predicted (red) vs. actual values (blue):
+
+```{r echo=FALSE}
+#plot(z3$fitted.values~z3$residuals)
+
+predzinb <-predict(z3,newdata=II_Data[II_Data$CFUs!=0,],type="response")
+plot(II_Data$CFUs[II_Data$CFUs!=0],type="b",col="red") #actual
+lines(round(predzinb),col="blue") #predicted values
+
+```
+
+## Model Interpretation and Visualization
+
+```{r}
+summary(z3)
+```
+
+### Model Interpretation:
+
+For the count model (non-zero), Temperature, Age, and the
+Temperature\*Age Interaction are all significant predictors of the
+log(CFUs) The estimate for temperature is 0.533625. This means that for
+each one unit increase in temperature, the expected change in log(CFUs)
+is 0.533625, holding all other variables constant. With increasing
+temperature, the log(CFUs) increases. The estimate for age is -0.556265.
+For each one unit increase in age, the expected change in log(CFUs) is
+-0.556265, holding all other variables constant.
+
+The interaction term is also significant. Temp has a greater part of
+this.
+
+Theta equals the inverse of the dispersion parameter.
+
+Baseline risk count being an excessive zero (zero inflation model) is
+small exp(-3.4222).
+
+## Model Predictions: Confidence Intervals and Risk/Odds Ratios
+
+```{r}
 #now, use bootstrapping to find confidence intervals and 
 #also to determine risk/odd ratios for the parameter estimates
 
@@ -707,17 +780,20 @@ f <- function(data, i) {
   z3 <- zeroinfl(CFUs ~ Temperature*Age | 1,
                  dist = 'negbin',
                  data = data[i,],
-                 start = list(count = c(-4.3642, 0.5336, -0.5563,0.024), 
+                 start = list(count = c(-4.3642, 0.5336,-0.5563,0.024), 
                               zero = c(-3.4222)))
   as.vector(t(do.call(rbind, coef(summary(z3)))[, 1:2]))
 }
 
 #bootstrap:
-gc()
 set.seed(10)
 (res <- boot(II_Data, f, R = 1200, parallel = "snow", ncpus = 4))
 #the results alternate the coefficient estimates and their standard errors
 #e.g. t1 is the estimate for the intercept in the conditional model, and t2 is the estimate for its standard error
+
+```
+
+```{r}
 
 ## basic parameter estimates with percentile and bias adjusted CIs
 #use sapply to extract the parameter estimates and apply function:
@@ -737,9 +813,11 @@ parms
 ## compare with normal based approximation
 confint(z3) # bootstrapped errors should be larger
 
-###
+```
+
+```{r}
 #now, follow similar procedure - exponentiate estimates (using log)
-#get incident risk ratio (IRR) for negative binomial model (non-zeros)
+#get incidence risk ratio (IRR) for negative binomial model (non-zeros)
 #get odds ratio (OR) for logit model (zero component) (zero inflation model)
 
 ## exponentiated parameter estimates with percentile and bias adjusted CIs
@@ -755,11 +833,38 @@ as.data.frame(expparms)
 row.names(expparms) <- names(coef(z3))
 ## print results
 expparms
+```
 
-#########################
+We can create risk and odds ratios because the parameter is the log of
+the ratio of expected counts (due to the distribution) (see
+<https://stats.oarc.ucla.edu/r/dae/negative-binomial-regression/>).
+
+The exp(estimate) scale is multiplicative, but the estimate scale is
+additive.
+
+The percent change in the incident rate of CFUs (occurrence of CFUs at
+any time) increases by 1.705% for every unit increase in temperature and
+by 0.573% for every unit increase in age.
+
+```{r}
+newdata1 <- expand.grid(c(27,30,32), rep(c(1,5,10,15)))
+
+
+colnames(newdata1) <- c("Temperature", "Age")
+newdata1$phat <- predict(z3, newdata1)
+#newdata1$phatlog <- log(newdata1$phat)
+
 newdata1
 
-ggplot(newdata1, aes(x = Temperature, y = response, colour = factor(Age))) +
+II_Summary <- II_Data %>%
+  group_by(Temperature,Age) %>%
+  summarise(mean_CFUs = mean(CFUs),
+            median_CFUs = median(CFUs),
+            sd_CFUs = sd(CFUs),
+            n_CFUs = n(),
+            SE_CFUs = sd(CFUs)/sqrt(n()))
+
+ggplot(newdata1, aes(x = Temperature, y = phat, colour = factor(Age))) +
   geom_point() +
   geom_line() +
   facet_grid(~Age,labeller = labeller(Age=agelabs, Temperature=templabs)) +
@@ -767,224 +872,35 @@ ggplot(newdata1, aes(x = Temperature, y = response, colour = factor(Age))) +
   geom_point(aes(x=Temperature,y=CFUs),size=(0.5),color="dark gray",data=II_Data)+
   geom_point(aes(x=Temperature,y=mean_CFUs),color="red",data=II_Summary)+
   geom_point(aes(x=Temperature,y=median_CFUs),color="blue",data=II_Summary)+
-  #geom_line(aes(x=Temperature,y=count),color="black",data=newdata1)
   #geom_errorbar(aes(ymin=predFE.min, ymax=predFE.max)) +
   theme_bw()
 
-ggplot(newdata1, aes(x = Age, y = response)) +
+ggplot(newdata1, aes(x = Temperature, y = phat, colour = factor(Age))) +
   geom_point() +
   geom_line() +
-  facet_grid(~Temperature,labeller = labeller(Age=agelabs, Temperature=templabs)) +
+  facet_grid(~Age,labeller = labeller(Age=agelabs, Temperature=templabs)) +
   labs(x = "Temperature", y = "Predicted CFUs vs. Observed CFUs")+
-  geom_point(aes(x=Age,y=CFUs),size=(0.5),color="dark gray",data=II_Data)+
-  geom_point(aes(x=Age,y=mean_CFUs),color="red",data=II_Summary)+
-  geom_point(aes(x=Age,y=median_CFUs),color="blue",data=II_Summary)+
+  geom_point(aes(x=Temperature,y=CFUs),size=(0.5),color="dark gray",data=II_Data)+
+  geom_point(aes(x=Temperature,y=mean_CFUs),color="red",data=II_Summary)+
+  geom_point(aes(x=Temperature,y=median_CFUs),color="blue",data=II_Summary)+
   #geom_errorbar(aes(ymin=predFE.min, ymax=predFE.max)) +
   theme_bw()
 
-ggplot(newdata1, aes(x = Age, y = response)) +
-  geom_point() +
-  geom_line() +
-  facet_grid(~Temperature,labeller = labeller(Age=agelabs, Temperature=templabs)) +
-  labs(x = "Temperature", y = "Predicted CFUs vs. Observed CFUs")+
-  geom_point(aes(x=Age,y=CFUs),size=(0.5),color="dark gray",data=II_Data)+
-  geom_point(aes(x=Age,y=mean_CFUs),color="red",data=II_Summary)+
-  geom_point(aes(x=Age,y=median_CFUs),color="blue",data=II_Summary)+ 
-  theme(legend.position = "none")+
-  #geom_errorbar(aes(ymin=predFE.min, ymax=predFE.max)) +
-  theme_bw()
+```
 
-ggplot(newdata1, aes(x = Age, y = response)) +
-  geom_point() +
-  geom_line() +
-  facet_grid(~Temperature,labeller = labeller(Age=agelabs, Temperature=templabs)) +
-  labs(x = "Age", y = "Predicted CFUs vs. Observed CFUs")+
-  geom_point(aes(x=Age,y=CFUs),size=(0.5),color="dark gray",data=II_Data)+
-  geom_point(aes(x=Age,y=mean_CFUs),color="red",data=II_Summary)+
-  geom_point(aes(x=Age,y=median_CFUs),color="blue",data=II_Summary)+ 
-  theme(legend.position = "none")+
-  #geom_errorbar(aes(ymin=predFE.min, ymax=predFE.max)) +
-  theme_bw()
+## Main messages:
 
-##############
+1)  Temperature and Age individually significantly impact the infection
+    intensity (expected log CFUs)
 
-#are the z3 model parameters important? yes.
-library(car)
-Anova(z3,
-      type="II",
-      test="Chisq")
+-   Warmer temperatures --\> Increased Infection Intensity With +1C,
+    increase CFUs by \~1.7 (e\^0.55).
 
-#is z3 model better than the null zi model?
-library(rcompanion)
-nagelkerke(z3) #yes
-##############
+-   Older Ages --\> Increased Infection Intensity With +1d, increase
+    CFUs by \~0.6 (e\^-0.55)
 
-#Neg binomial with log link regression coefficients for each of the variables along 
-#with standard errors, z-scores, and p-values 
-#A second block follows that corresponds to the inflation model. 
-#This includes binomial logit coefficients for predicting excess zeros along 
-#with their standard errors, z-scores, and p-values.
+2)  The interaction of Temperature and Age significantly impacts the
+    infection intensity, and Temp plays a larger role.
 
-########################################
-
-#Interaction Plots and Marginal Means
-#?interaction.plot()
-
-interaction.plot(
-  x.factor = II_Data$Temperature,
-  trace.factor = II_Data$Age,
-  response = II_Data$CFUs,
-  trace.label = "Age",fixed=TRUE,
-  xlab = "Temperature (˚C)", ylab = "mean CFUs",
-  main = "Interaction Plot of the Effects of Temperature \nand Age on Mean CFUs",
-  col = brewer.pal(n=4,name="Dark2"),
-  lwd = 2.5,
-  lty = 1
-)
-
-interaction.plot(
-  x.factor = II_Data$Age,
-  trace.factor = II_Data$Temperature,
-  response = II_Data$CFUs,
-  trace.label = "Temp (˚C)",fixed=TRUE,
-  xlab = "Adult Age (days post eclosion)", ylab = "mean CFUs",
-  main = "Interaction Plot of the Effects of Temperature \nand Age on Mean CFUs",
-  col = brewer.pal(n=4,name="Dark2"),
-  lwd = 2.5,
-  lty = 1
-)
-
-#https://strengejacke.github.io/ggeffects/
-#https://cran.r-project.org/web/packages/sjPlot/vignettes/plot_marginal_effects.html
-library(ggeffects)
-library(ggplot2)
-library(splines)
-
-ggpredict(z3, terms = "Temperature")
-ggpredict(z3, terms = "Age")
-marginalmeanspreds <- ggpredict(z3, terms = c("Temperature","Age"))
-
-ggplot(marginalmeanspreds, aes(x=x,y=predicted,colour=group))+
-  geom_line()+
-  facet_wrap(~group)+
-  labs(x = "Temperature (˚C)", y = "Predicted CFUs")+
-  theme(legend.position = "none")
-
-plot(marginalmeanspreds,
-     ci=TRUE,
-     #add.data=TRUE,
-     alpha=0.05)
-
-
-####
-library(sjPlot)
-library(ggplot2)
-theme_set(theme_sjplot())
-
-plot_model(z3, type = "pred", terms = "Temperature")
-plot_model(z3, type = "pred", terms = "Age")
-plot_model(z3, type = "pred", 
-           terms = c("Temperature","Age"),
-           axis.title ="Predicted mean CFU counts")
-####
-plot_model(z3, type = "int", mdrt.values = "meansd")
-
-
-####
-#https://stats.oarc.ucla.edu/r/seminars/interactions-r/#s3
-#continuous ~ continuous variable interactions
-#data is continuous but can pick examples to plot
-library(emmeans)
-mylist <- list(Temperature=27,Age=10)
-emmeans(z3, ~ Temperature*Age, at=mylist)
-
-#by temperature:
-templow <- 27
-tempmid <- 30
-temphigh <-32
-
-mylist <- list(Temperature = c(templow,tempmid,temphigh))
-emtrends(z3, ~Temperature, var="Age",at=mylist)
-
-#simple slopes for age at low med and high values of temperature
-#increasing temperature --> relationship of age on CFUs increases
-
-#range of lower and upper CIs do not include zero - all three are significant
-
-#now plot the cont~cont interaction:
-mylist <- list(Age=seq(0,15,by=1),Temperature=c(templow,tempmid,temphigh))
-mylist
-
-emmeansbytemp <- emmip(z3,Temperature~Age,at=mylist, CIs=TRUE,plotit = FALSE)
-
-#now by age:
-ageyoung<-1
-agelowmid <-5
-agehighmid <-10
-ageold <-15
-
-mylist <- list(Age = c(ageyoung,agelowmid,agehighmid,ageold))
-emtrends(z3, ~Age, var="Temperature",at=mylist)
-
-#simple slopes for Temp at young, low mid, high mid, and old values of age
-#increasing age --> relationship of Temp on CFUs increases
-#range of lower and upper CIs do not include zero - all three are significant
-
-#now plot the cont~cont interaction:
-mylist <- list(Temperature=seq(27,32,by=1),Age = c(ageyoung,agelowmid,agehighmid,ageold))
-mylist
-
-emmeansbyage <- emmip(z3,Age~Temperature,at=mylist, CIs=TRUE,plotit = FALSE)
-      #xlab="Temperature",ylab="Estimated marginal means of CFUs",tlab="Interaction of ",
-      #facetlab="label_both")
-###
-
-emmeansbytemp$Temperature <- factor(emmeansbytemp$Temperature)
-levels(emmeansbytemp$Temperature)
-
-
-ggplot(data=emmeansbytemp, 
-       aes(x=Age,y=yvar, color=Temperature)) + 
-  geom_line()+
-  geom_ribbon(aes(ymax=UCL, ymin=LCL, fill=Temperature), alpha=0.3)+
-  labs(x="Adult Age (days post eclosion)", y="CFUs", color="Temperature (˚C)", 
-       fill="Temperature (˚C)",
-       title="Interaction of temperaure and age on expected CFUs")
-##
-emmeansbyage$Age <- factor(emmeansbyage$Age)
-levels(emmeansbyage$Age)
-
-ggplot(data=emmeansbyage, 
-       aes(x=Temperature,y=yvar, color=Age)) + 
-  geom_line()+
-  geom_ribbon(aes(ymax=UCL, ymin=LCL, fill=Age), alpha=0.3)+
-  labs(x="Temperature (˚C)", y="CFUs", color="Adult Age \n(days post eclosion)", 
-       fill="Adult Age \n(days post eclosion)",
-       title="Interaction of temperaure and age on expected CFUs")
-
-##################################3
-###################################
-
-II_Data_27C <- subset(II_Data,Temperature==27)
-II_Data_30C <- subset(II_Data,Temperature==30) 
-II_Data_32C <- subset(II_Data,Temperature==32)
-
-
-lm27 <- lm(CFUs~Age,data=II_Data_27C)
-Anova(lm27,type=2)
-ggplot(aes(x=Age,y=CFUs),data=II_Data_27C)+
-  geom_point()
-plot(lm27)
-
-lm30 <- lm(CFUs~Age,data=II_Data_30C)
-plot(lm30)
-
-lm32 <- lm(CFUs~Age,data=II_Data_32C)
-plot(lm32)
-
-#plot the empirical distribution and density (CDF)
-plotdist(II_Data_27C$CFUs, histo=TRUE,demp=TRUE)
-plotdist(II_Data_30C$CFUs, histo=TRUE,demp=TRUE)
-plotdist(II_Data_32C$CFUs, histo=TRUE,demp=TRUE)
-
-#########################
+3)  The count data were over-dispersed and zero-inflated, best modeled
+    by a zero-inflated negative binomial distribution.
