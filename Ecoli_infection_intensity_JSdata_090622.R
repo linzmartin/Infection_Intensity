@@ -322,6 +322,7 @@ glmNegBinomial_additive <- glm.nb(CFUs ~ Temperature+Age, data=II_Data,link="log
 
 #check models:
 summary(glmPoisson) 
+logLik(glmPoisson)
 #Residual deviance: 342540627  on 692  degrees of freedom
 #AIC: 342549916
 
@@ -555,6 +556,8 @@ fitbe_z4$formula
 #compare Max-liklihood estimators for different models: 
 model_list <- list("ML-Pois" = glmPoisson, "Quasi-Pois" = glmQuasiPoisson, "NB" = glmNegBinomial,"ZINB" = z3)
 
+#logLik(glmNegBinomial)
+#logLik(z3)
 #inspect estimated regression coefficients for each model:
 sapply(model_list, function(x) coef(x)[1:5])
 
