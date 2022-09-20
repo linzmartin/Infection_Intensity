@@ -682,7 +682,7 @@ Model_AICs
 
 ### The negative binomial model is improved by the addition of the zero-inflation component.
 
-The ZINB model has a larger log-liklihood (less negative value) and
+The ZINB model has a larger log-likelihood (less negative value) and
 smaller AIC value.
 
 ```{r}
@@ -830,6 +830,8 @@ lines(round(predzinb),col="blue") #predicted values
 
 ## Model Interpretation and Visualization
 
+What is the model output and what does this mean?
+
 ```{r}
 summary(z3)
 ```
@@ -837,21 +839,42 @@ summary(z3)
 ### Model Interpretation:
 
 For the count model (non-zero), Temperature, Age, and the
-Temperature\*Age Interaction are all significant predictors of the
-log(CFUs) The estimate for temperature is 0.533625. This means that for
-each one unit increase in temperature, the expected change in log(CFUs)
-is 0.533625, holding all other variables constant. With increasing
-temperature, the log(CFUs) increases. The estimate for age is -0.556265.
-For each one unit increase in age, the expected change in log(CFUs) is
--0.556265, holding all other variables constant.
+Temperature\*Age Interaction are all significant predictors of the log(CFUs).
 
-The interaction term is also significant. Temp has a greater part of
-this.
+The interaction term is significant - this means that the individual coefficients for the main effects of temperature and age cannot be interpreted in the same way as they would be if no interaction were included in the model.
+
+
+The estimate for temperature is 0.533625. This means that for each one unit increase in temperature, the expected change in log(CFUs) is 0.533625, when age=0 (and there is no interaction). The estimate for age is -0.556265. For each one unit increase in age, the expected change in log(CFUs) is -0.556265, when temperature=0 (and there is no interaction).
+
+The coefficient for a one unit change in temperature only indicates an increase in log(CFUs) of 0.533625 when the value of age is zero, not when all variables are held constant - this is because you cannot hold both the value of main effects and the interaction term constant without changing one or the other (the interaction includes the main effect).
+
+That means that the main effect coefficients are much less informative than they would be if no interaction were present, because we don't see values of age=0 or temperature=0 in our dataset (see Brambor et al 2006).
+
+Temperature and age interact. The reductive effect of age when temperature=0 substantially decreases when temperature increases (there is a positive coefficient on the interaction term).
+
+Because the interaction term is significant, it is much more meaningful to interpret the interaction and the effects of temperature and age by looking at the marginal effects (see figures and calculations further below). 
+
+The coefficient for the interaction term indicates the additional change in the effect or slope of Temp for every unit change in Age (and vice versa).
+
+
 
 Theta equals the inverse of the dispersion parameter.
 
-Baseline risk count being an excessive zero (zero inflation model) is
-small exp(-3.4222).
+The significant p-value for the intercept for the zero-inflation model indicates that the intercept is non-zero. Therefore, the baseline odds of an excessive zero (zero inflation model) is 1-exp(3.4222)= -0.408. This is an odds ratio because it is a binomial model with logit link.
+
+#### References to review for notes, explanations, and examples:
+https://stats.oarc.ucla.edu/r/seminars/interactions-r/#s3
+
+Brambor, T., Clark, W. R., & Golder, M. (2006). Understanding Interaction Models: Improving Empirical Analyses. Political Analysis, 14(1), 63–82. http://www.jstor.org/stable/25791835
+
+AND:
+https://stats.stackexchange.com/questions/31027/how-to-interpret-main-effects-when-the-interaction-effect-is-not-significant
+https://stats.stackexchange.com/questions/572196/how-to-interpret-an-interaction-in-a-negative-binomial
+https://stats.stackexchange.com/questions/180155/what-does-it-mean-intuitively-to-hold-other-variables-constant-in-regression
+https://stats.stackexchange.com/questions/84314/what-does-all-else-equal-mean-in-multiple-regression
+https://www.stata-journal.com/article.html?article=st0194
+
+
 
 ## Model Predictions: Confidence Intervals and Risk/Odds Ratios
 
@@ -926,16 +949,15 @@ row.names(expparms) <- names(coef(z3))
 expparms
 ```
 
-We can create risk and odds ratios because the parameter is the log of
-the ratio of expected counts (due to the distribution) (see
+We can create risk and odds ratios because the parameter is the log of the ratio of expected counts (due to the distribution) 
+(see
 <https://stats.oarc.ucla.edu/r/dae/negative-binomial-regression/>).
 
-The exp(estimate) scale is multiplicative, but the estimate scale is
-additive.
+The exp(estimate) scale is multiplicative, but the estimate scale is additive because it is a negative binomial model.
 
-The percent change in the incident rate of CFUs (occurrence of CFUs at
-any time) increases by 1.705% for every unit increase in temperature and
-by 0.573% for every unit increase in age.
+The percent change in the incident rate of CFUs (occurrence of CFUs at any time) changes by 1.705% for every unit increase in temperature when age = 0 and by 0.573% for every unit increase in age when temperature = 0 (when the opposite variable is zero, due to a significant interaction, as in the explanation above).
+
+### We can visualize the predicted outcomes compared to the actual data: 
 
 ```{r}
 II_Summary 
@@ -951,30 +973,7 @@ ggplot(newdata1, aes(x = Temperature, y = response, colour = factor(Age))) +
   geom_point(aes(x=Temperature,y=median_CFUs),color="blue",data=II_Summary)+
   theme_bw()
 
-ggplot(newdata1, aes(x = Age, y = response)) +
-  geom_point() +
-  geom_line() +
-  facet_grid(~Temperature,labeller = labeller(Age=agelabs, Temperature=templabs)) +
-  labs(x = "Temperature", y = "Predicted CFUs vs. Observed CFUs")+
-  geom_point(aes(x=Age,y=CFUs),size=(0.5),color="dark gray",data=II_Data)+
-  geom_point(aes(x=Age,y=mean_CFUs),color="red",data=II_Summary)+
-  geom_point(aes(x=Age,y=median_CFUs),color="blue",data=II_Summary)+
-  #geom_errorbar(aes(ymin=predFE.min, ymax=predFE.max)) +
-  theme_bw()
-
-ggplot(newdata1, aes(x = Age, y = response)) +
-  geom_point() +
-  geom_line() +
-  facet_grid(~Temperature,labeller = labeller(Age=agelabs, Temperature=templabs)) +
-  labs(x = "Temperature", y = "Predicted CFUs vs. Observed CFUs")+
-  geom_point(aes(x=Age,y=CFUs),size=(0.5),color="dark gray",data=II_Data)+
-  geom_point(aes(x=Age,y=mean_CFUs),color="red",data=II_Summary)+
-  geom_point(aes(x=Age,y=median_CFUs),color="blue",data=II_Summary)+ 
-  theme(legend.position = "none")+
-  #geom_errorbar(aes(ymin=predFE.min, ymax=predFE.max)) +
-  theme_bw()
-
-ggplot(newdata1, aes(x = Age, y = response)) +
+ggplot(newdata1, aes(x = Age, y = response, colour=factor(Temperature))) +
   geom_point() +
   geom_line() +
   facet_grid(~Temperature,labeller = labeller(Age=agelabs, Temperature=templabs)) +
@@ -983,11 +982,10 @@ ggplot(newdata1, aes(x = Age, y = response)) +
   geom_point(aes(x=Age,y=mean_CFUs),color="red",data=II_Summary)+
   geom_point(aes(x=Age,y=median_CFUs),color="blue",data=II_Summary)+ 
   theme(legend.position = "none")+
-  #geom_errorbar(aes(ymin=predFE.min, ymax=predFE.max)) +
   theme_bw()
 ```
 
-We can also better understand the interaction of temperature and age using interaction plots and estimated marginal means.
+We can also better understand the interaction of temperature and age using interaction plots and estimated marginal means. The marginal means and effects can be reported (see tables for marginal means by temp and by age), and the visual graphs are a great representation of how temperature and age interact to change the CFU outcome. Looking at marginal means for interpreting the effects of temperature, age, and their interaction is more informative given the significant interaction of temperature and age on the expected count of CFUs.
 
 ```{r}
 #Interaction Plots and Marginal Means
@@ -1054,6 +1052,8 @@ plot_model(z3, type = "pred",
 ####
 plot_model(z3, type = "int", mdrt.values = "meansd")
 ```
+
+This is another way to determine marginal means:
 
 ```{r}
 ####
@@ -1133,17 +1133,8 @@ ggplot(data=emmeansbyage,
 
 ## Main messages:
 
-1)  Temperature and Age individually significantly impact the infection
-    intensity (expected log CFUs)
+1)  Temperature, Age, and their interaction significantly impact the infection intensity (expected log CFUs), with warmer temperatures and older ages interacting to increase the infection intensity. At warmer temperatures, older ages increase infection intensity more than at cooler temperatures, and vice versa.
 
--   Warmer temperatures --\> Increased Infection Intensity With +1C,
-    increase CFUs by \~1.7 (e\^0.55).
+2) Because of the significant interaction, the marginal means are a better way to understand how temperature, age, and their interaction alter infection intensity.
 
--   Older Ages --\> Increased Infection Intensity With +1d, increase
-    CFUs by \~0.6 (e\^-0.55)
-
-2)  The interaction of Temperature and Age significantly impacts the
-    infection intensity, and Temp plays a larger role.
-
-3)  The count data were over-dispersed and zero-inflated, best modeled
-    by a zero-inflated negative binomial distribution.
+3)  The count data were over-dispersed and zero-inflated, best modeled by a zero-inflated negative binomial distribution.
