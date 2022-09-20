@@ -1,11 +1,5 @@
 TO DO:
 
-put new code in R markdown
-rerun R markdown
-Save all in Box
-
-make lab meeting presentation
-
 ----------
 
 COMPLETED: 
@@ -23,6 +17,13 @@ Group predictions by temperature
 
 separate effects of temp and age in interaction term??
 make interaction plot
+
+put new code in R markdown
+rerun R markdown
+Save all in Box
+
+make lab meeting presentation
+
 
 --------
 ----------
