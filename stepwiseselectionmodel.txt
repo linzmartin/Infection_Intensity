@@ -4,15 +4,15 @@ zeroinfl(formula = eval(parse(text = out)), data = data, dist = dist)
 
 Pearson residuals:
     Min      1Q  Median      3Q     Max 
--0.8665 -0.6830 -0.3692  0.3006  5.8005 
+-0.8665 -0.6830 -0.3692  0.3006  5.8008 
 
 Count model coefficients (negbin with log link):
                  Estimate Std. Error z value Pr(>|z|)    
-(Intercept)     -4.364214   1.443458  -3.023 0.002499 ** 
-Temperature      0.533625   0.048530  10.996  < 2e-16 ***
-Age             -0.556265   0.185236  -3.003 0.002673 ** 
-Temperature:Age  0.024016   0.006197   3.875 0.000107 ***
-Log(theta)      -0.229650   0.049360  -4.653 3.28e-06 ***
+(Intercept)     12.673200   0.043297 292.704  < 2e-16 ***
+Temperature      0.708936   0.024319  29.152  < 2e-16 ***
+Age              0.158466   0.009528  16.632  < 2e-16 ***
+Temperature:Age  0.024016   0.005725   4.195 2.73e-05 ***
+Log(theta)      -0.229651   0.047153  -4.870 1.11e-06 ***
 
 Zero-inflation model coefficients (binomial with logit link):
             Estimate Std. Error z value Pr(>|z|)    
