@@ -741,8 +741,8 @@ smaller AIC value.
 gc() #clear memory to make space for computation
 
 #can run this to get the value of 22 below (takes awhile)
-#zinb_predictions <- predict(z3, type = "prob") #even more computationally intensive - too large to process in R alone
-#str(zinb_predictions)
+zinb_predictions <- predict(z3, type = "prob") #even more computationally intensive - too large to process in R alone
+str(zinb_predictions)
 
 #type=prob gives probabilities of counts
 #22/696 = 0.03
